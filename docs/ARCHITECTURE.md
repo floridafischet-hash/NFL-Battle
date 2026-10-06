@@ -171,7 +171,10 @@ Spiel verbunden, aus dem es tatsächlich bzw. laut Tipp kommt).
 * Klickt ein Benutzer auf ein Team, wird es Sieger dieses Slots und rückt automatisch in den
   Folge-Slot vor – bis zum Super Bowl und zum Champion.
 * Ändert ein Benutzer einen Tipp, werden nachgelagerte, noch offene Tipps, die dadurch ungültig
-  werden, automatisch entfernt (Kaskade). Tipps in Slots mit bereits feststehender echter Paarung
+  werden, automatisch entfernt (Kaskade).
+* Status eines Tipps: `valid` (Team in der Paarung), `pending` (Gegner steht noch nicht fest, das Team
+  kann den Slot aber noch erreichen – z. B. der Super-Bowl-Tipp, solange die andere Conference offen
+  ist), `invalid` (Team nicht in der Paarung bzw. ausgeschieden). Tipps in Slots mit bereits feststehender echter Paarung
   bleiben erhalten; ist das getippte Team dort nicht (mehr) dabei, wird der Tipp als
   **„ungültig – Team ausgeschieden“** markiert und kann bis zum Lock neu gesetzt werden.
 * Tipps sind pro Slot änderbar, solange das Spiel **OPEN** und `lock_at` nicht erreicht ist.
@@ -275,5 +278,6 @@ Vollständige Liste: [`API.md`](API.md); interaktiv unter `/api/docs` (OpenAPI).
 * Rate-Limits: Nginx (pro IP) + Backend (pro Benutzer/Token, z. B. Chat, Agent).
 * Agent-Tokens nur als SHA-256-Hash gespeichert; Agent ≠ Admin.
 * Audit-Log ist per Datenbank-Trigger gegen UPDATE/DELETE geschützt.
-* Secrets nur über `.env` (nicht im Repository); im Produktionsmodus verweigert das Backend den
-  Start mit Platzhalter-Secrets.
+* Secrets nur über `.env` (nicht im Repository). Platzhalter (`CHANGE_ME…`) werden beim ersten Start
+  durch Zufallswerte ersetzt (Signaturschlüssel in `/data/.secret_key`, Admin-/Demo-Passwort im Log
+  des `migrate`-Dienstes); `scripts/generate-secrets.sh` setzt feste Werte in `.env`.
