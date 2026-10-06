@@ -1,0 +1,220 @@
+"""Authentication & authorization.
+
+* Users log in with username + password (managed inside the app). Passwords are stored as
+  salted PBKDF2-SHA256 hashes. After login the client receives a signed access token (JWT, HS256)
+  which it sends as ``Authorization: Bearer …``.
+* The OpenClaw agent authenticates with an app-issued API token (``nbb_…``) that only grants the
+  role AGENT. Agent principals can never use user/admin endpoints and vice versa.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import secrets
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal
+
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.core.db import get_session
+from app.models import AgentToken, User
+from app.models.enums import Role
+
+AGENT_TOKEN_PREFIX = "nbb_"
+JWT_ALGORITHM = "HS256"
+LAST_SEEN_THROTTLE = timedelta(minutes=5)
+_PBKDF2 = "pbkdf2_sha256"
+
+
+class AuthError(HTTPException):
+    def __init__(self, detail: str, code: int = status.HTTP_401_UNAUTHORIZED):
+        headers = {"WWW-Authenticate": "Bearer"} if code == status.HTTP_401_UNAUTHORIZED else None
+        super().__init__(status_code=code, detail=detail, headers=headers)
+
+
+@dataclass
+class Principal:
+    kind: Literal["user", "agent"]
+    label: str
+    roles: frozenset[str] = field(default_factory=frozenset)
+    user: User | None = None
+    agent_token_id: int | None = None
+    ip: str | None = None
+
+    @property
+    def is_admin(self) -> bool:
+        return self.kind == "user" and Role.ADMIN.value in self.roles
+
+    @property
+    def user_id(self):
+        return self.user.id if self.user else None
+
+
+# --------------------------------------------------------------------------------------------
+# Passwords
+# --------------------------------------------------------------------------------------------
+
+
+def hash_password(password: str) -> str:
+    iterations = get_settings().password_hash_iterations
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return f"{_PBKDF2}${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
+
+
+def verify_password(password: str, stored: str | None) -> bool:
+    if not stored:
+        return False
+    try:
+        algorithm, iterations, salt_b64, digest_b64 = stored.split("$")
+        if algorithm != _PBKDF2:
+            return False
+        expected = base64.b64decode(digest_b64)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), base64.b64decode(salt_b64), int(iterations))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(digest, expected)
+
+
+# a valid hash used to keep login timing similar for unknown usernames
+_DUMMY_HASH: str | None = None
+
+
+def dummy_verify(password: str) -> None:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = hash_password("dummy-password")
+    verify_password(password, _DUMMY_HASH)
+
+
+# --------------------------------------------------------------------------------------------
+# Access tokens
+# --------------------------------------------------------------------------------------------
+
+
+def create_access_token(user: User) -> tuple[str, datetime]:
+    settings = get_settings()
+    now = datetime.now(UTC)
+    expires = now + timedelta(days=settings.token_ttl_days)
+    claims = {
+        "sub": str(user.id),
+        "ver": user.token_version,
+        "role": user.role.value,
+        "iat": int(now.timestamp()),
+        "exp": int(expires.timestamp()),
+        "typ": "access",
+    }
+    return jwt.encode(claims, settings.secret_key, algorithm=JWT_ALGORITHM), expires
+
+
+def decode_access_token(token: str) -> dict:
+    try:
+        claims = jwt.decode(
+            token,
+            get_settings().secret_key,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp", "iat", "sub"]},
+        )
+    except jwt.ExpiredSignatureError:
+        raise AuthError("Sitzung abgelaufen – bitte erneut anmelden")
+    except jwt.PyJWTError:
+        raise AuthError("Ungültige Anmeldung")
+    if claims.get("typ") != "access":
+        raise AuthError("Ungültige Anmeldung")
+    return claims
+
+
+def hash_agent_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_agent_token() -> tuple[str, str, str]:
+    """Return (token, prefix, sha256) for a new agent API token."""
+    token = AGENT_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    return token, token[:12], hash_agent_token(token)
+
+
+def client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if forwarded:
+        return forwarded[:64]
+    return request.client.host if request.client else None
+
+
+async def authenticate(token: str, session: AsyncSession, ip: str | None = None) -> Principal:
+    now = datetime.now(UTC)
+    if token.startswith(AGENT_TOKEN_PREFIX):
+        record = (
+            await session.execute(
+                select(AgentToken).where(
+                    AgentToken.token_hash == hash_agent_token(token), AgentToken.revoked_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if record is None:
+            raise AuthError("Ungültiger Agent-Token")
+        if record.last_used_at is None or now - record.last_used_at > timedelta(minutes=1):
+            record.last_used_at = now
+            await session.commit()
+        return Principal("agent", f"token:{record.name}", frozenset({Role.AGENT.value}), None, record.id, ip)
+
+    claims = decode_access_token(token)
+    try:
+        user = await session.get(User, uuid.UUID(str(claims["sub"])))
+    except ValueError:
+        user = None
+    if user is None or user.is_bot or claims.get("ver") != user.token_version:
+        raise AuthError("Sitzung ungültig – bitte erneut anmelden")
+    if not user.is_active:
+        raise AuthError("Dein Zugang wurde gesperrt. Bitte wende dich an einen Admin.", status.HTTP_403_FORBIDDEN)
+    if user.last_seen_at is None or now - user.last_seen_at > LAST_SEEN_THROTTLE:
+        user.last_seen_at = now
+        await session.commit()
+    roles = frozenset({Role.USER.value, Role.ADMIN.value} if user.role == Role.ADMIN else {Role.USER.value})
+    return Principal("user", user.display_name, roles, user, None, ip)
+
+
+def _bearer(request: Request) -> str:
+    header = request.headers.get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise AuthError("Anmeldung erforderlich")
+    return token.strip()
+
+
+async def get_principal(request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> Principal:
+    principal = await authenticate(_bearer(request), session, client_ip(request))
+    request.state.principal = principal
+    return principal
+
+
+async def require_user(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
+    if principal.kind != "user":
+        raise AuthError("Agent-Zugänge dürfen keine Benutzerfunktionen verwenden", status.HTTP_403_FORBIDDEN)
+    return principal
+
+
+async def require_admin(principal: Annotated[Principal, Depends(require_user)]) -> Principal:
+    if not principal.is_admin:
+        raise AuthError("Nur für Admins", status.HTTP_403_FORBIDDEN)
+    return principal
+
+
+async def require_agent(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
+    if principal.kind != "agent":
+        raise AuthError("Nur für den Agent-Zugang (Rolle AGENT)", status.HTTP_403_FORBIDDEN)
+    return principal
+
+
+CurrentUser = Annotated[Principal, Depends(require_user)]
+CurrentAdmin = Annotated[Principal, Depends(require_admin)]
+CurrentAgent = Annotated[Principal, Depends(require_agent)]
+DBSession = Annotated[AsyncSession, Depends(get_session)]

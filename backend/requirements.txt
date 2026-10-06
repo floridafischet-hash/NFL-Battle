@@ -1,0 +1,11 @@
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+sqlalchemy[asyncio]>=2.0.36,<2.2
+alembic==1.20.0
+psycopg[binary,pool]==3.3.6
+pydantic==2.13.5
+pydantic-settings==2.15.0
+pyjwt[crypto]==2.15.1
+httpx==0.28.1
+pillow==12.3.0
+python-multipart>=0.0.20

@@ -1,0 +1,31 @@
+# Secrets & local config
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/test-results/
+frontend/playwright-report/
+frontend/e2e/.auth/
+*.tsbuildinfo
+next-env.d.ts
+
+# Runtime data
+data/
+backups/
+uploads/
+*.log
+.DS_Store
