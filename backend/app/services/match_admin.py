@@ -234,6 +234,13 @@ async def generate_wild_card(session: AsyncSession, principal: Principal, season
     """Create the 2v7, 3v6, 4v5 pairings of both conferences from the seeds."""
     seeds = {(st.conference, st.seed): st.team_id for st in await load_season_teams(session, season.id)}
     matches = {m.slot: m for m in await load_matches(session, season.id)}
+    for conf in (Conference.AFC, Conference.NFC):
+        missing = [n for n in range(1, 8) if (conf, n) not in seeds]
+        if missing:
+            missing_text = ", ".join(map(str, missing))
+            raise unprocessable(
+                f"Für die {conf.value} fehlen Seeds: {missing_text} (benötigt: 1–7, Seed 1 hat ein Freilos)."
+            )
     changed = []
     for conf in (Conference.AFC, Conference.NFC):
         for index, (home_seed, away_seed) in WILD_CARD_SEEDS.items():

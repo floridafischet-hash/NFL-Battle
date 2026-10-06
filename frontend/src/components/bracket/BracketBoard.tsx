@@ -31,7 +31,11 @@ export interface BracketBoardProps {
   onPick?: (slot: BracketSlot, team: Team) => void;
   onScore?: (slot: BracketSlot) => void;
   onOpen?: (slot: BracketSlot) => void;
+  /** Scale the board down to the available width (down to MIN_SCALE, then scroll). */
+  fit?: boolean;
 }
+
+const MIN_SCALE = 0.74;
 
 function elbow(x1: number, y1: number, x2: number, y2: number): string {
   if (Math.abs(y1 - y2) < 1) return `M${x1},${y1} H${x2}`;
@@ -81,6 +85,7 @@ export function BracketBoard({
   onPick,
   onScore,
   onOpen,
+  fit = false,
 }: BracketBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const nodes = useRef(new Map<string, HTMLElement>());
@@ -107,11 +112,17 @@ export function BracketBoard({
     const board = boardRef.current;
     if (!board) return;
     const base = board.getBoundingClientRect();
+    // the board may be scaled (fit mode): convert screen pixels back to board pixels
+    const k = base.width ? board.offsetWidth / base.width : 1;
     const rect = (key: string) => {
       const el = nodes.current.get(key);
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      return { left: r.left - base.left, right: r.right - base.left, cy: (r.top + r.bottom) / 2 - base.top };
+      return {
+        left: (r.left - base.left) * k,
+        right: (r.right - base.left) * k,
+        cy: ((r.top + r.bottom) / 2 - base.top) * k,
+      };
     };
     const out: PathSpec[] = [];
     for (const [slotKey, placeholders] of Object.entries(PLACEHOLDER_ORIGINS)) {
@@ -160,14 +171,43 @@ export function BracketBoard({
     return () => ro.disconnect();
   }, [measure]);
 
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [natural, setNatural] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const outer = outerRef.current;
+    const board = boardRef.current;
+    if (!fit || !outer || !board) return;
+    const update = () => {
+      const w = board.offsetWidth;
+      const h = board.offsetHeight;
+      setNatural({ w, h });
+      setScale(w ? Math.max(MIN_SCALE, Math.min(1, outer.clientWidth / w)) : 1);
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(outer);
+    ro.observe(board);
+    return () => ro.disconnect();
+  }, [fit]);
+  const scaled = fit && scale < 1;
+
   const champion = championTeamId != null ? allTeams.get(championTeamId) : undefined;
   const sb = bySlot.get("SB");
   const bodyH = size === "large" ? 540 : 420;
   const gap = size === "large" ? "gap-x-7" : "gap-x-[14px]";
 
   return (
-    <div className="scrollbar-thin -mx-1 overflow-x-auto px-1 pb-2">
-      <div ref={boardRef} className={clsx("relative mx-auto flex w-max items-stretch", gap)} data-testid="bracket-board">
+    <div ref={outerRef} className="scrollbar-thin -mx-1 overflow-x-auto px-1 pb-2">
+      <div
+        className="mx-auto"
+        style={scaled ? { width: natural.w * scale, height: natural.h * scale } : undefined}
+      >
+      <div
+        ref={boardRef}
+        className={clsx("relative mx-auto flex w-max items-stretch", gap)}
+        style={scaled ? { transform: `scale(${scale})`, transformOrigin: "top left" } : undefined}
+        data-testid="bracket-board"
+      >
         <svg className="pointer-events-none absolute top-0 left-0 z-0 overflow-visible" width={box.w} height={box.h} aria-hidden>
           {paths.map((p) => (
             <path
@@ -272,6 +312,7 @@ export function BracketBoard({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

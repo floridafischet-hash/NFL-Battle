@@ -196,3 +196,14 @@ async def test_drag_and_drop_assignment_validation(admin):
     assert (
         await admin.patch(f"/api/admin/matches/{sb}", {"home_team_id": t["KC"], "away_team_id": t["PHI"]})
     ).status_code == 200
+
+
+async def test_wild_card_generation_requires_all_seeds_incl_bye(admin):
+    r = await admin.post("/api/admin/seasons", {"name": "2032/2033", "year": 2032})
+    sid = r.json()["id"]
+    teams = (await admin.get("/api/teams")).json()
+    by_abbr = {t["abbreviation"]: t["id"] for t in teams}
+    entries = [{"team_id": by_abbr[a], "seed": i + 2} for i, a in enumerate(["BUF", "BAL", "HOU", "MIA", "LAC", "PIT"])]
+    assert (await admin.put(f"/api/admin/seasons/{sid}/teams", entries)).status_code == 200
+    r = await admin.post(f"/api/admin/seasons/{sid}/generate-wildcard")
+    assert r.status_code == 422 and "Seed 1" in r.json()["detail"]

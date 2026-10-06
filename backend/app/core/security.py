@@ -12,10 +12,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import logging
 import secrets
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Annotated, Literal
 
 import jwt
@@ -23,10 +25,12 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_placeholder
 from app.core.db import get_session
 from app.models import AgentToken, User
 from app.models.enums import Role
+
+log = logging.getLogger(__name__)
 
 AGENT_TOKEN_PREFIX = "nbb_"
 JWT_ALGORITHM = "HS256"
@@ -99,6 +103,28 @@ def dummy_verify(password: str) -> None:
 # Access tokens
 # --------------------------------------------------------------------------------------------
 
+_secret_cache: str | None = None
+
+
+def signing_secret() -> str:
+    """SECRET_KEY from the environment, or – if it is still a placeholder – a random key that is
+    generated once and persisted in DATA_DIR/.secret_key (so tokens survive restarts)."""
+    global _secret_cache
+    settings = get_settings()
+    if not is_placeholder(settings.secret_key) and len(settings.secret_key) >= 16:
+        return settings.secret_key
+    if _secret_cache is None:
+        path = Path(settings.data_dir) / ".secret_key"
+        if path.exists():
+            _secret_cache = path.read_text().strip()
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _secret_cache = secrets.token_urlsafe(48)
+            path.write_text(_secret_cache)
+            path.chmod(0o600)
+            log.warning("SECRET_KEY is a placeholder – generated a random key in %s", path)
+    return _secret_cache
+
 
 def create_access_token(user: User) -> tuple[str, datetime]:
     settings = get_settings()
@@ -112,14 +138,14 @@ def create_access_token(user: User) -> tuple[str, datetime]:
         "exp": int(expires.timestamp()),
         "typ": "access",
     }
-    return jwt.encode(claims, settings.secret_key, algorithm=JWT_ALGORITHM), expires
+    return jwt.encode(claims, signing_secret(), algorithm=JWT_ALGORITHM), expires
 
 
 def decode_access_token(token: str) -> dict:
     try:
         claims = jwt.decode(
             token,
-            get_settings().secret_key,
+            signing_secret(),
             algorithms=[JWT_ALGORITHM],
             options={"require": ["exp", "iat", "sub"]},
         )

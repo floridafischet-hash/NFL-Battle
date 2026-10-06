@@ -83,6 +83,7 @@ export default function DashboardPage() {
                 byes={bracket.data.byes}
                 mode={view === "mine" ? "view" : "live"}
                 size="compact"
+                fit
                 seasonYear={season.year}
                 scoreTips={season.score_tips_enabled}
                 championTeamId={champion}

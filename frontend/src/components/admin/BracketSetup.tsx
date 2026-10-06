@@ -90,6 +90,7 @@ function DropSlot({
         disabled && "opacity-60",
       )}
       data-dropzone={id}
+      data-testid={id}
     >
       <div className="flex min-h-10 items-center gap-2 px-1">
         <span className="w-14 shrink-0 text-[10px] font-bold tracking-wider text-slate-500 uppercase">{label}</span>

@@ -24,6 +24,10 @@ def configure_logging() -> None:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240 - once at startup
+    if settings.has_placeholder_db_password:
+        logging.getLogger("app").warning(
+            "POSTGRES_PASSWORD is still a CHANGE_ME placeholder – run scripts/generate-secrets.sh for real deployments"
+        )
     stop = asyncio.Event()
     tasks = [asyncio.create_task(listen_forever(stop))]
     if settings.scheduler_enabled:

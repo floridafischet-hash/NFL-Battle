@@ -1,10 +1,14 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_PREFIX = "CHANGE_ME"
+
+
+def is_placeholder(value: str | None) -> bool:
+    return not value or PLACEHOLDER_PREFIX in value
 
 
 class Settings(BaseSettings):
@@ -31,7 +35,8 @@ class Settings(BaseSettings):
     admin_display_name: str = "Admin"
     demo_user_password: str | None = None
 
-    # Uploads
+    # Persistent data (uploads, generated secrets)
+    data_dir: str = "/data"
     upload_dir: str = "/data/uploads"
     max_upload_mb: int = 5
 
@@ -58,19 +63,9 @@ class Settings(BaseSettings):
     def _strip_slash(cls, v: str) -> str:
         return v.rstrip("/")
 
-    @model_validator(mode="after")
-    def _check_secrets(self) -> "Settings":
-        if self.app_env == "production":
-            for name in ("database_url", "secret_key", "admin_password"):
-                value = getattr(self, name) or ""
-                if PLACEHOLDER_PREFIX in value:
-                    raise ValueError(
-                        f"{name.upper()} still contains a '{PLACEHOLDER_PREFIX}' placeholder. "
-                        "Run scripts/generate-secrets.sh or set real secrets in .env."
-                    )
-            if len(self.secret_key) < 32:
-                raise ValueError("SECRET_KEY must be at least 32 characters in production.")
-        return self
+    @property
+    def has_placeholder_db_password(self) -> bool:
+        return PLACEHOLDER_PREFIX in self.database_url
 
     @property
     def trusted_domains(self) -> list[str]:

@@ -10,12 +10,14 @@ import argparse
 import asyncio
 import logging
 import random
+import secrets
+import string
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_placeholder
 from app.core.db import dispose_engine, get_sessionmaker
 from app.core.security import Principal, hash_password
 from app.models import (
@@ -59,6 +61,16 @@ SCORE_WINNER = [17, 20, 21, 23, 24, 27, 28, 30, 31, 34, 35, 38]
 SCORE_LOSER = [7, 10, 13, 14, 16, 17, 20, 21, 23, 24, 27, 28]
 
 
+def random_password(length: int) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def banner(text: str) -> None:
+    line = "=" * min(100, len(text) + 4)
+    log.warning("\n%s\n  %s\n%s", line, text, line)
+
+
 async def ensure_teams(session) -> dict[str, Team]:
     existing = {t.abbreviation: t for t in (await session.execute(select(Team))).scalars()}
     for abbr, city, short, conf, division, primary, secondary in NFL_TEAMS:
@@ -86,14 +98,15 @@ async def ensure_admin(session) -> User | None:
     admin = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if admin is not None:
         return admin
-    if not settings.admin_password:
-        log.warning("ADMIN_PASSWORD not set – no initial admin account created")
-        return None
+    password = settings.admin_password
+    if is_placeholder(password):
+        password = random_password(12)
+        banner(f"Initialer Admin: Benutzername '{username}', Passwort '{password}' – bitte nach dem Login ändern")
     admin = User(
         username=username,
         display_name=settings.admin_display_name,
         role=Role.ADMIN,
-        password_hash=hash_password(settings.admin_password),
+        password_hash=hash_password(password),
     )
     session.add(admin)
     await session.flush()
@@ -272,8 +285,11 @@ async def seed_demo(session, admin: User, teams: dict[str, Team]) -> None:
     if (await session.execute(select(func.count(Season.id)))).scalar_one() > 0:
         log.info("seasons already exist – demo data skipped")
         return
-    if not settings.demo_user_password:
-        log.warning("DEMO_USER_PASSWORD not set – demo users are created without password (set one in the admin area)")
+    demo_password = settings.demo_user_password
+    if is_placeholder(demo_password):
+        demo_password = random_password(8)
+        banner(f"Demo-Benutzer (florian, dennis, stefan, marcel, lisa, kevin, tobi) – Passwort '{demo_password}'")
+    demo_hash = hash_password(demo_password)
     users = []
     for username, display, _ in DEMO_USERS:
         user = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
@@ -282,7 +298,7 @@ async def seed_demo(session, admin: User, teams: dict[str, Team]) -> None:
                 username=username,
                 display_name=display,
                 role=Role.USER,
-                password_hash=hash_password(settings.demo_user_password) if settings.demo_user_password else None,
+                password_hash=demo_hash,
             )
             session.add(user)
         users.append(user)
