@@ -109,7 +109,7 @@ class ResolvedSlot:
     locked: bool = False
     actual_winner_team_id: int | None = None
     pick: Pick | None = None
-    pick_state: str = "none"  # none | valid | invalid
+    pick_state: str = "none"  # none | valid | pending (pairing still open, team can get there) | invalid
     effective_winner_team_id: int | None = None
     extra: dict = field(default_factory=dict)
 
@@ -201,6 +201,8 @@ def resolve_bracket(
     book = SeedBook(seeds)
     resolved: dict[str, ResolvedSlot] = {}
     effective: dict[str, int | None] = {}
+    # teams that can still come out of a slot (used to tell "pending" from "invalid" picks)
+    candidates: dict[str, set[int]] = {}
 
     for slot in slots_in_resolution_order():
         m = matches.get(slot.slot)
@@ -225,17 +227,26 @@ def resolve_bracket(
         r.home_origin = _origin(r.home_team_id, slot, resolved, book)
         r.away_origin = _origin(r.away_team_id, slot, resolved, book)
 
+        known = {t for t in (r.home_team_id, r.away_team_id) if t is not None}
+        reachable = set(known)
+        if not r.teams_known:
+            for feeder in slot.feeders:
+                reachable |= candidates.get(feeder, set())
+
         pick = picks.get(slot.slot)
         r.pick = pick
         if pick is not None:
-            valid = r.teams_known and pick.winner_team_id in (r.home_team_id, r.away_team_id)
-            r.pick_state = "valid" if valid else "invalid"
+            if r.teams_known:
+                r.pick_state = "valid" if pick.winner_team_id in known else "invalid"
+            else:
+                r.pick_state = "pending" if pick.winner_team_id in reachable else "invalid"
 
         if r.actual_winner_team_id is not None:
             r.effective_winner_team_id = r.actual_winner_team_id
         elif r.status != MatchStatus.VOID and r.pick_state == "valid" and pick is not None:
             r.effective_winner_team_id = pick.winner_team_id
         effective[slot.slot] = r.effective_winner_team_id
+        candidates[slot.slot] = {r.effective_winner_team_id} if r.effective_winner_team_id else reachable
         resolved[slot.slot] = r
     return resolved
 

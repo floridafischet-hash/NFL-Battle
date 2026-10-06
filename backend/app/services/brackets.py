@@ -401,7 +401,9 @@ async def bracket_view(session: AsyncSession, ctx: SeasonContext, owner: User, v
         "submitted_at": bracket.submitted_at if bracket else None,
         "picks_count": len(all_picks),
         "missing_open_picks": len(missing_open_picks(ctx, ctx.resolve(all_picks))) if full else None,
-        "champion_team_id": sb.effective_winner_team_id if sb and sb.pick_state == "valid" else None,
+        "champion_team_id": (
+            sb.pick.winner_team_id if sb and sb.pick and sb.pick_state in ("valid", "pending") else None
+        ),
         "byes": byes,
         "slots": slots_out,
         "points": leader.points if leader else 0,
@@ -446,8 +448,9 @@ async def brackets_overview(session: AsyncSession, ctx: SeasonContext, viewer: P
         resolved = ctx.resolve(picks)
         missing = missing_open_picks(ctx, resolved)
         champion = None
-        if (sb_locked or can_see_all(viewer, u.id)) and resolved["SB"].pick_state == "valid":
-            champion = team_out(teams.get(resolved["SB"].effective_winner_team_id), ctx.seeds)
+        sb_slot = resolved["SB"]
+        if (sb_locked or can_see_all(viewer, u.id)) and sb_slot.pick and sb_slot.pick_state in ("valid", "pending"):
+            champion = team_out(teams.get(sb_slot.pick.winner_team_id), ctx.seeds)
         lb = leaders.get(u.id)
         out.append(
             {

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="HOU">
+<defs>
+<linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#042b3f"/><stop offset="1" stop-color="#021621"/></linearGradient>
+<linearGradient id="shine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="clip"><path d="M64 5 L116 21 V60 C116 92 94 113 64 123 C34 113 12 92 12 60 V21 Z"/></clipPath>
+</defs>
+<path d="M64 5 L116 21 V60 C116 92 94 113 64 123 C34 113 12 92 12 60 V21 Z" fill="url(#body)"/>
+<g clip-path="url(#clip)">
+<rect x="55" y="0" width="18" height="128" fill="#ffffff" opacity=".9"/>
+<rect x="52" y="0" width="2.5" height="128" fill="#fff" opacity=".55"/>
+<rect x="73.5" y="0" width="2.5" height="128" fill="#fff" opacity=".55"/>
+<path d="M0 0 H128 V58 C96 46 32 46 0 58 Z" fill="url(#shine)"/>
+<path d="M30 98 H98" stroke="#000" stroke-opacity=".25" stroke-width="10"/>
+</g>
+<path d="M64 5 L116 21 V60 C116 92 94 113 64 123 C34 113 12 92 12 60 V21 Z" fill="none" stroke="#053a55" stroke-width="6" stroke-linejoin="round"/>
+<path d="M64 13 L108 27 V60 C108 87 89 105 64 114 C39 105 20 87 20 60 V27 Z" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/>
+<g fill="#ffffff" stroke="#0a0d14" stroke-width="5" stroke-linejoin="round" paint-order="stroke"><path transform="translate(26.56 78.00) scale(0.04198 -0.04198)" d="M63 0V810H242V482H368V810H547V0H368V354H242V0Z"/><path transform="translate(52.16 78.00) scale(0.04198 -0.04198)" d="M292 -12Q201 -12 148.0 20.0Q95 52 72.0 112.0Q49 172 49 255V556Q49 640 72.0 699.0Q95 758 148.0 789.5Q201 821 292 821Q384 821 437.5 789.5Q491 758 514.0 699.0Q537 640 537 556V255Q537 172 514.0 112.0Q491 52 437.5 20.0Q384 -12 292 -12ZM292 115Q320 115 333.0 129.0Q346 143 350.0 165.0Q354 187 354 210V600Q354 624 350.0 645.5Q346 667 333.0 681.0Q320 695 292 695Q266 695 253.0 681.0Q240 667 236.0 645.5Q232 624 232 600V210Q232 187 235.5 165.0Q239 143 251.5 129.0Q264 115 292 115Z"/><path transform="translate(76.76 78.00) scale(0.04198 -0.04198)" d="M294 -12Q201 -12 148.5 18.5Q96 49 75.0 107.5Q54 166 54 251V810H231V224Q231 199 235.0 174.0Q239 149 252.5 133.0Q266 117 294 117Q323 117 336.0 133.0Q349 149 352.5 174.0Q356 199 356 224V810H534V251Q534 166 512.5 107.5Q491 49 439.0 18.5Q387 -12 294 -12Z"/></g>
+<g fill="#fff" opacity=".9"><circle cx="50" cy="98" r="2.2"/><circle cx="64" cy="98" r="2.2"/><circle cx="78" cy="98" r="2.2"/></g>
+</svg>

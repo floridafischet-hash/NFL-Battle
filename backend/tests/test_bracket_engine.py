@@ -157,3 +157,25 @@ def test_void_match_has_no_effective_winner():
     matches = wild_card_matches(**{"AFC-WC-1": MatchState("AFC-WC-1", a(2), a(7), MatchStatus.VOID, None, True)})
     r = resolve_bracket(SEEDS, matches, {"AFC-WC-1": Pick(a(2))})
     assert r["AFC-WC-1"].effective_winner_team_id is None
+
+
+def test_pick_waiting_for_opponent_is_pending_not_invalid():
+    # AFC side fully picked, NFC conference still open -> Super Bowl pick of the AFC champion is pending
+    picks = {
+        "AFC-WC-1": Pick(a(2)),
+        "AFC-WC-2": Pick(a(3)),
+        "AFC-WC-3": Pick(a(4)),
+        "AFC-DIV-1": Pick(a(1)),
+        "AFC-DIV-2": Pick(a(3)),
+        "AFC-CONF": Pick(a(1)),
+        "SB": Pick(a(1)),
+    }
+    r = resolve_bracket(SEEDS, wild_card_matches(), picks)
+    assert r["SB"].teams_source == "partial"
+    assert r["SB"].pick_state == "pending"
+    assert "SB" not in picks_to_clear_after_change(r)
+    # a team that cannot reach the slot anymore is invalid
+    picks["SB"] = Pick(a(4))
+    picks["AFC-CONF"] = Pick(a(1))
+    r = resolve_bracket(SEEDS, wild_card_matches(), picks)
+    assert r["SB"].pick_state == "invalid"

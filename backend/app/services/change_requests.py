@@ -103,7 +103,7 @@ async def create_request(
         "CHANGE_REQUEST",
         f"Änderungsantrag von {principal.user.display_name}",
         match_label(match),
-        "/admin?tab=antraege",
+        "/admin?tab=requests",
     )
     await publish(session, "change_request_updated", target_admins=True)
     await session.commit()
