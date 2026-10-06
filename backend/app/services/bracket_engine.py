@@ -158,9 +158,7 @@ def reseed_divisional(
     return div1, div2
 
 
-def derive_teams(
-    slot: SlotDef, effective: Mapping[str, int | None], seeds: SeedBook
-) -> tuple[int | None, int | None]:
+def derive_teams(slot: SlotDef, effective: Mapping[str, int | None], seeds: SeedBook) -> tuple[int | None, int | None]:
     """Teams of a slot derived from the effective winners of its feeder slots."""
     if slot.round == Round.WILD_CARD:
         return (None, None)

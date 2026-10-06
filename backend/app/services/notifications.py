@@ -39,9 +39,13 @@ async def admin_user_ids(session: AsyncSession) -> list[uuid.UUID]:
     return list(rows.scalars())
 
 
-async def notify_admins(session: AsyncSession, type_: str, title: str, body: str | None = None, link: str | None = None) -> int:
+async def notify_admins(
+    session: AsyncSession, type_: str, title: str, body: str | None = None, link: str | None = None
+) -> int:
     return await notify(session, await admin_user_ids(session), type_, title, body, link)
 
 
-async def notify_all(session: AsyncSession, type_: str, title: str, body: str | None = None, link: str | None = None) -> int:
+async def notify_all(
+    session: AsyncSession, type_: str, title: str, body: str | None = None, link: str | None = None
+) -> int:
     return await notify(session, await active_user_ids(session), type_, title, body, link)

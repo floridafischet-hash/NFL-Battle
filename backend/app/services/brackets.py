@@ -19,7 +19,6 @@ from app.realtime.events import publish
 from app.services.audit import audit
 from app.services.bracket_engine import (
     ROUND_LABELS,
-    SLOTS,
     Pick,
     ResolvedSlot,
     picks_to_clear_after_change,
@@ -78,20 +77,24 @@ async def load_context(session: AsyncSession, season: Season) -> SeasonContext:
     )
 
 
-async def get_bracket(session: AsyncSession, user_id: uuid.UUID, season_id: int, for_update: bool = False) -> Bracket | None:
+async def get_bracket(
+    session: AsyncSession, user_id: uuid.UUID, season_id: int, for_update: bool = False
+) -> Bracket | None:
     stmt = select(Bracket).where(Bracket.user_id == user_id, Bracket.season_id == season_id)
     if for_update:
         stmt = stmt.with_for_update(of=Bracket)
     return (await session.execute(stmt)).unique().scalar_one_or_none()
 
 
-async def get_or_create_bracket(session: AsyncSession, user_id: uuid.UUID, season_id: int, for_update: bool = False) -> Bracket:
+async def get_or_create_bracket(
+    session: AsyncSession, user_id: uuid.UUID, season_id: int, for_update: bool = False
+) -> Bracket:
     bracket = await get_bracket(session, user_id, season_id, for_update)
     if bracket is None:
         await session.execute(
-            insert(Bracket).values(user_id=user_id, season_id=season_id).on_conflict_do_nothing(
-                constraint="uq_brackets_user_season"
-            )
+            insert(Bracket)
+            .values(user_id=user_id, season_id=season_id)
+            .on_conflict_do_nothing(constraint="uq_brackets_user_season")
         )
         bracket = await get_bracket(session, user_id, season_id, for_update)
         assert bracket is not None
@@ -154,13 +157,22 @@ async def set_pick(
     elif (winner_score is None) != (loser_score is None):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Bitte beide Punktzahlen angeben.")
     elif winner_score is not None and loser_score is not None and winner_score <= loser_score:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Der getippte Sieger muss mehr Punkte haben (kein Unentschieden in den Playoffs).")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Der getippte Sieger muss mehr Punkte haben (kein Unentschieden in den Playoffs).",
+        )
 
     existing = next((p for p in bracket.predictions if p.match_id == match.id), None)
     old = pick_dict(existing)
     if existing is None:
-        existing = Prediction(bracket_id=bracket.id, match_id=match.id, winner_team_id=winner_team_id,
-                              winner_score=winner_score, loser_score=loser_score, updated_via="WEB")
+        existing = Prediction(
+            bracket_id=bracket.id,
+            match_id=match.id,
+            winner_team_id=winner_team_id,
+            winner_score=winner_score,
+            loser_score=loser_score,
+            updated_via="WEB",
+        )
         bracket.predictions.append(existing)
     else:
         existing.winner_team_id = winner_team_id
@@ -169,8 +181,16 @@ async def set_pick(
         existing.updated_via = "WEB"
     new = pick_dict(existing)
     if old != new:
-        audit(session, principal, "PREDICTION_UPDATED" if old else "PREDICTION_CREATED", "prediction",
-              f"{principal.user.id}:{match.id}", old, {**(new or {}), "slot": slot}, source="WEB")
+        audit(
+            session,
+            principal,
+            "PREDICTION_UPDATED" if old else "PREDICTION_CREATED",
+            "prediction",
+            f"{principal.user.id}:{match.id}",
+            old,
+            {**(new or {}), "slot": slot},
+            source="WEB",
+        )
 
     picks[slot] = Pick(winner_team_id, winner_score, loser_score)
     await _apply_cascade(session, principal, ctx, bracket, picks)
@@ -192,7 +212,15 @@ async def clear_pick(session: AsyncSession, principal: Principal, season: Season
     existing = next((p for p in bracket.predictions if p.match_id == match.id), None)
     if existing is None:
         return
-    audit(session, principal, "PREDICTION_DELETED", "prediction", f"{principal.user.id}:{match.id}", pick_dict(existing), None)
+    audit(
+        session,
+        principal,
+        "PREDICTION_DELETED",
+        "prediction",
+        f"{principal.user.id}:{match.id}",
+        pick_dict(existing),
+        None,
+    )
     bracket.predictions.remove(existing)
     picks = picks_by_slot(bracket.predictions, ctx.by_id)
     await _apply_cascade(session, principal, ctx, bracket, picks, force_unsubmit=True)
@@ -215,8 +243,16 @@ async def _apply_cascade(
         match = ctx.by_slot[slot]
         pred = next((p for p in bracket.predictions if p.match_id == match.id), None)
         if pred is not None:
-            audit(session, principal, "PREDICTION_CLEARED", "prediction", f"{bracket.user_id}:{match.id}",
-                  pick_dict(pred), None, source="CASCADE")
+            audit(
+                session,
+                principal,
+                "PREDICTION_CLEARED",
+                "prediction",
+                f"{bracket.user_id}:{match.id}",
+                pick_dict(pred),
+                None,
+                source="CASCADE",
+            )
             bracket.predictions.remove(pred)
         picks.pop(slot, None)
     if cleared:
@@ -239,8 +275,15 @@ async def submit_bracket(session: AsyncSession, principal: Principal, season: Se
             f"Es fehlen noch {len(missing)} gültige Tipps, bevor du dein Bracket abgeben kannst.",
         )
     bracket.submitted_at = ctx.now
-    audit(session, principal, "BRACKET_SUBMITTED", "bracket", bracket.id, None,
-          {"season_id": season.id, "picks": len(bracket.predictions)})
+    audit(
+        session,
+        principal,
+        "BRACKET_SUBMITTED",
+        "bracket",
+        bracket.id,
+        None,
+        {"season_id": season.id, "picks": len(bracket.predictions)},
+    )
     await publish(session, "bracket_updated", season_id=season.id, user_id=str(principal.user.id))
     await session.commit()
     return ctx.now
@@ -260,7 +303,9 @@ async def _scores_for(session: AsyncSession, user_id: uuid.UUID, season_id: int)
     return {s.match_id: s for s in rows.scalars()}
 
 
-async def _pending_requests(session: AsyncSession, user_id: uuid.UUID, match_ids: list[int]) -> dict[int, PredictionChange]:
+async def _pending_requests(
+    session: AsyncSession, user_id: uuid.UUID, match_ids: list[int]
+) -> dict[int, PredictionChange]:
     rows = await session.execute(
         select(PredictionChange).where(
             PredictionChange.user_id == user_id,
@@ -280,7 +325,9 @@ async def bracket_view(session: AsyncSession, ctx: SeasonContext, owner: User, v
     resolved = ctx.resolve(visible)
     seeds = ctx.seeds
     scores = await _scores_for(session, owner.id, ctx.season.id)
-    pending = await _pending_requests(session, owner.id, [m.id for m in ctx.matches]) if viewer.user_id == owner.id else {}
+    pending = (
+        await _pending_requests(session, owner.id, [m.id for m in ctx.matches]) if viewer.user_id == owner.id else {}
+    )
     teams_by_id = _teams_index(ctx)
 
     slots_out = []
@@ -311,7 +358,9 @@ async def bracket_view(session: AsyncSession, ctx: SeasonContext, owner: User, v
                 "winner_team_id": match.winner_team_id,
                 "has_pick": match.slot in all_picks,
                 "pick_hidden": hidden,
-                "pick": None if r.pick is None else {
+                "pick": None
+                if r.pick is None
+                else {
                     "winner_team_id": r.pick.winner_team_id,
                     "winner_score": r.pick.winner_score,
                     "loser_score": r.pick.loser_score,
@@ -321,7 +370,9 @@ async def bracket_view(session: AsyncSession, ctx: SeasonContext, owner: User, v
                 "points": score.points if score else None,
                 "winner_correct": score.winner_correct if score else None,
                 "exact_correct": score.exact_correct if score else None,
-                "pending_change_request": None if cr is None else {
+                "pending_change_request": None
+                if cr is None
+                else {
                     "id": cr.id,
                     "new_winner_team_id": cr.new_winner_team_id,
                     "new_winner_score": cr.new_winner_score,
@@ -339,7 +390,12 @@ async def bracket_view(session: AsyncSession, ctx: SeasonContext, owner: User, v
     sb = resolved.get("SB")
     return {
         "season_id": ctx.season.id,
-        "user": {"id": owner.id, "display_name": owner.display_name, "avatar_url": owner.avatar_url, "username": owner.username},
+        "user": {
+            "id": owner.id,
+            "display_name": owner.display_name,
+            "avatar_url": owner.avatar_url,
+            "username": owner.username,
+        },
         "is_owner": viewer.user_id == owner.id,
         "full_visibility": full,
         "submitted_at": bracket.submitted_at if bracket else None,
@@ -375,7 +431,9 @@ async def brackets_overview(session: AsyncSession, ctx: SeasonContext, viewer: P
     }
     leaders = {
         lb.user_id: lb
-        for lb in (await session.execute(select(Leaderboard).where(Leaderboard.season_id == ctx.season.id))).unique().scalars()
+        for lb in (await session.execute(select(Leaderboard).where(Leaderboard.season_id == ctx.season.id)))
+        .unique()
+        .scalars()
     }
     teams = _teams_index(ctx)
     sb_locked = ctx.locked("SB")
@@ -393,7 +451,12 @@ async def brackets_overview(session: AsyncSession, ctx: SeasonContext, viewer: P
         lb = leaders.get(u.id)
         out.append(
             {
-                "user": {"id": u.id, "display_name": u.display_name, "avatar_url": u.avatar_url, "username": u.username},
+                "user": {
+                    "id": u.id,
+                    "display_name": u.display_name,
+                    "avatar_url": u.avatar_url,
+                    "username": u.username,
+                },
                 "is_me": u.id == viewer.user_id,
                 "picks_count": len(picks),
                 "missing_open_picks": len(missing),

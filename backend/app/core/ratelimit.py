@@ -6,7 +6,6 @@ instances (see nginx/nginx.conf).
 
 import time
 from collections import defaultdict, deque
-
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status

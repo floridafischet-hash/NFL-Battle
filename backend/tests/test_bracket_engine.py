@@ -70,10 +70,18 @@ def test_upset_changes_divisional_pairings():
 
 def test_full_path_valid_picks():
     picks = {
-        "AFC-WC-1": Pick(a(2)), "AFC-WC-2": Pick(a(3)), "AFC-WC-3": Pick(a(4)),
-        "AFC-DIV-1": Pick(a(1)), "AFC-DIV-2": Pick(a(3)), "AFC-CONF": Pick(a(3)),
-        "NFC-WC-1": Pick(n(7)), "NFC-WC-2": Pick(n(3)), "NFC-WC-3": Pick(n(4)),
-        "NFC-DIV-1": Pick(n(7)), "NFC-DIV-2": Pick(n(3)), "NFC-CONF": Pick(n(7)),
+        "AFC-WC-1": Pick(a(2)),
+        "AFC-WC-2": Pick(a(3)),
+        "AFC-WC-3": Pick(a(4)),
+        "AFC-DIV-1": Pick(a(1)),
+        "AFC-DIV-2": Pick(a(3)),
+        "AFC-CONF": Pick(a(3)),
+        "NFC-WC-1": Pick(n(7)),
+        "NFC-WC-2": Pick(n(3)),
+        "NFC-WC-3": Pick(n(4)),
+        "NFC-DIV-1": Pick(n(7)),
+        "NFC-DIV-2": Pick(n(3)),
+        "NFC-CONF": Pick(n(7)),
         "SB": Pick(n(7)),
     }
     r = resolve_bracket(SEEDS, wild_card_matches(), picks)
@@ -85,8 +93,12 @@ def test_full_path_valid_picks():
 
 def test_changing_upstream_pick_cascades():
     picks = {
-        "AFC-WC-1": Pick(a(2)), "AFC-WC-2": Pick(a(3)), "AFC-WC-3": Pick(a(4)),
-        "AFC-DIV-1": Pick(a(4)), "AFC-DIV-2": Pick(a(2)), "AFC-CONF": Pick(a(4)),
+        "AFC-WC-1": Pick(a(2)),
+        "AFC-WC-2": Pick(a(3)),
+        "AFC-WC-3": Pick(a(4)),
+        "AFC-DIV-1": Pick(a(4)),
+        "AFC-DIV-2": Pick(a(2)),
+        "AFC-CONF": Pick(a(4)),
     }
     # user switches WC-3 to the 5 seed -> picks with the 4 seed downstream become invalid
     picks["AFC-WC-3"] = Pick(a(5))
@@ -142,8 +154,6 @@ def test_downstream_slots():
 
 
 def test_void_match_has_no_effective_winner():
-    matches = wild_card_matches(
-        **{"AFC-WC-1": MatchState("AFC-WC-1", a(2), a(7), MatchStatus.VOID, None, True)}
-    )
+    matches = wild_card_matches(**{"AFC-WC-1": MatchState("AFC-WC-1", a(2), a(7), MatchStatus.VOID, None, True)})
     r = resolve_bracket(SEEDS, matches, {"AFC-WC-1": Pick(a(2))})
     assert r["AFC-WC-1"].effective_winner_team_id is None

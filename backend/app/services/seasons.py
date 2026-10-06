@@ -63,9 +63,7 @@ async def load_matches(session: AsyncSession, season_id: int, for_update: bool =
 
 
 async def load_season_teams(session: AsyncSession, season_id: int) -> list[SeasonTeam]:
-    return list(
-        (await session.execute(select(SeasonTeam).where(SeasonTeam.season_id == season_id))).unique().scalars()
-    )
+    return list((await session.execute(select(SeasonTeam).where(SeasonTeam.season_id == season_id))).unique().scalars())
 
 
 def seed_map(season_teams: list[SeasonTeam]) -> dict[int, int]:

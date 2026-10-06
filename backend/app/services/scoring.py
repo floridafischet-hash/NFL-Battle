@@ -53,9 +53,9 @@ async def score_match(session: AsyncSession, season: Season, match: Match) -> li
     brackets = list(
         (
             await session.execute(
-                select(Bracket).join(User, User.id == Bracket.user_id).where(
-                    Bracket.season_id == season.id, User.is_bot.is_(False)
-                )
+                select(Bracket)
+                .join(User, User.id == Bracket.user_id)
+                .where(Bracket.season_id == season.id, User.is_bot.is_(False))
             )
         )
         .unique()
@@ -101,9 +101,9 @@ async def recompute_leaderboard(session: AsyncSession, season: Season) -> list[L
             func.coalesce(func.sum(case(((s.has_pick & ~s.winner_correct), 1), else_=0)), 0).label("wrong"),
             func.coalesce(func.sum(case((~s.has_pick, 1), else_=0)), 0).label("missed"),
             func.coalesce(func.sum(case((s.exact_correct, 1), else_=0)), 0).label("exact"),
-            func.coalesce(
-                func.max(case(((Match.slot == "SB") & s.winner_correct, 1), else_=0)), 0
-            ).cast(Integer).label("champion"),
+            func.coalesce(func.max(case(((Match.slot == "SB") & s.winner_correct, 1), else_=0)), 0)
+            .cast(Integer)
+            .label("champion"),
             func.count(s.id).label("scored"),
         )
         .select_from(Bracket)
@@ -118,7 +118,9 @@ async def recompute_leaderboard(session: AsyncSession, season: Season) -> list[L
     by_user = {r.user_id: r for r in rows}
     existing = {
         lb.user_id: lb
-        for lb in (await session.execute(select(Leaderboard).where(Leaderboard.season_id == season.id))).unique().scalars()
+        for lb in (await session.execute(select(Leaderboard).where(Leaderboard.season_id == season.id)))
+        .unique()
+        .scalars()
     }
     result: list[Leaderboard] = []
     for entry, rank in competition_ranks(inputs):
