@@ -16,7 +16,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.drop_constraint(op.f("fk_audit_logs_actor_user_id_users"), "audit_logs", type_="foreignkey")
+    # IF EXISTS also supports installations that briefly ran the original 0003 version of this
+    # migration before the app-settings and superuser migrations were added upstream.
+    op.execute("ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_audit_logs_actor_user_id_users")
 
 
 def downgrade() -> None:
