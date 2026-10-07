@@ -31,7 +31,7 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
                                             ┌──────────────────┐
                                             │ PostgreSQL 16    │
                                             └──────────────────┘
-        OpenClaw Agent ──HTTPS──▶ /api/agent/*  (eigener Token, Rolle AGENT)
+        Ergebnis-Agent (im Backend) ──HTTPS──▶ OpenAI API (ChatGPT + Websuche)
 ```
 
 * **Eine Domain, Pfad-Routing.** Frontend (`/`), API (`/api`), WebSocket (`/ws`) und Uploads (`/media`)
@@ -51,11 +51,11 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
 .
 ├── backend/                 FastAPI-Anwendung
 │   ├── app/
-│   │   ├── api/             HTTP-/WebSocket-Router (user, admin, agent, public)
+│   │   ├── api/             HTTP-/WebSocket-Router (user, admin, public)
 │   │   ├── core/            Konfiguration, Security, Rate-Limits, Logging
 │   │   ├── models/          SQLAlchemy-Modelle (= Datenmodell)
 │   │   ├── schemas/         Pydantic-Schemas (Ein-/Ausgabe-Validierung)
-│   │   ├── services/        Fachlogik: bracket engine, scoring, results, agent, bot, chat, audit …
+│   │   ├── services/        Fachlogik: bracket engine, scoring, results, agent (Prüfung), result_agent (ChatGPT), bot, chat, audit …
 │   │   ├── realtime/        WebSocket-Hub + PostgreSQL LISTEN/NOTIFY
 │   │   ├── seed/            Demo- und Stammdaten (32 NFL-Teams)
 │   │   └── main.py
@@ -69,7 +69,7 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
 │   └── e2e/                 Playwright UI- und Abnahmetests
 ├── nginx/                   Reverse-Proxy-Konfiguration
 ├── scripts/                 Backup, Restore, Secrets, Logos, Update
-├── docs/                    Architektur, API, OpenClaw, Entscheidungen
+├── docs/                    Architektur, API, ChatGPT-Agent, Entscheidungen
 ├── docker-compose.yml       Komplettes System (lokal/Server, HTTP)
 ├── docker-compose.prod.yml  Overlay: Traefik + HTTPS (Let's Encrypt)
 └── .env.example             Alle Konfigurationswerte (keine echten Secrets)
@@ -80,8 +80,7 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
 | Rolle   | Wie                                   | Darf                                                                                  |
 |---------|---------------------------------------|---------------------------------------------------------------------------------------|
 | `USER`  | Benutzerkonto (Name + Passwort)       | eigenes Bracket tippen, Änderungen beantragen, Chat, Ranglisten, Statistiken, fremde Brackets (nur aufgedeckte Spiele) |
-| `ADMIN` | Benutzerkonto mit Rolle ADMIN         | alles von USER + `/api/admin/*` (Benutzer, Saisons, Teams, Spiele, Ergebnisse, Anträge, Punkte, Agent, Audit) |
-| `AGENT` | API-Token (`nbb_…`), im Admin erzeugt | ausschließlich `/api/agent/*` (Ergebnisse melden, offene Spiele abfragen, Spielplan) |
+| `ADMIN` | Benutzerkonto mit Rolle ADMIN         | alles von USER + `/api/admin/*` (Benutzer, Saisons, Teams, Spiele, Ergebnisse, Anträge, Punkte, ChatGPT-Agent, Audit) |
 
 * **Login:** `POST /api/auth/login` mit Benutzername + Passwort ⇒ signiertes Access-Token (JWT, HS256,
   Laufzeit `TOKEN_TTL_DAYS`, Standard 30 Tage). Das Frontend sendet es als `Authorization: Bearer`.
@@ -91,9 +90,9 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
 * Passwortänderung oder Sperre wirken sofort: jedes Token trägt eine `token_version`, die bei
   Passwortänderung erhöht wird; gesperrte Benutzer werden bei jeder Anfrage abgewiesen.
 * Beim ersten Start legt das System einen Admin aus `ADMIN_USERNAME`/`ADMIN_PASSWORD` an.
-* Ein Agent-Token ist **immer** ein Agent-Principal und wird auf allen User-/Admin-Endpunkten mit
-  `403` abgewiesen, User/Admin-Tokens auf allen Agent-Endpunkten ebenfalls. OpenClaw kann damit nie
-  Adminrechte erhalten. Agent-Tokens werden nur als SHA-256-Hash gespeichert und sind widerrufbar.
+* Es gibt **keinen Maschinen-Zugang** von außen. Der ChatGPT-Ergebnis-Agent läuft im Backend
+  (`app/services/result_agent.py`) und handelt intern als Principal „ChatGPT (Modell)“ – im Audit-Log
+  als Akteur `AGENT`. Fehlgeschlagene Logins sperren nur das Paar (Konto, IP) für 15 Minuten.
 
 ## 4. Datenmodell
 
@@ -105,7 +104,7 @@ users ─┬─< brackets >── seasons ──< season_teams >── teams
        │      │            │                            │
        │      └─< predictions >── matches ──────────────┘ (home/away/winner)
        │                │          │
-       │                │          ├─< result_reports >── agent_runs >── agent_tokens
+       │                │          ├─< result_reports >── agent_runs
        │                │          └─< scores
        ├─< prediction_changes (Änderungsanträge)
        ├─< leaderboards (pro Saison)
@@ -132,8 +131,7 @@ seasons ──1 hall_of_fame
 | `uploads` | Hochgeladene Dateien (Chat-Bilder, Avatare, Logos) | `kind`, `path`, `content_type`, `size_bytes`, `uploaded_by` |
 | `notifications` | Benachrichtigungen (Glocke) | `user_id`, `type`, `title`, `body`, `link`, `read_at` |
 | `audit_logs` | Unveränderliches Protokoll | `actor_type`, `actor_user_id`, `actor_label`, `action`, `object_type`, `object_id`, `old_value`, `new_value`, `source`, `ip_address`, `created_at`; DB-Trigger verhindert UPDATE/DELETE |
-| `agent_tokens` | API-Tokens für OpenClaw | nur SHA-256-Hash gespeichert, `token_prefix`, `revoked_at`, `last_used_at` |
-| `agent_runs` | Jeder Agent-Aufruf | `agent_label`, `kind`, `status`, `request_payload`, `message`, `match_id` |
+| `agent_runs` | Jeder Schritt des Ergebnis-Agenten (ChatGPT-Suche `RESEARCH`, Prüfung `RESULT`, Admin-Anstoß `CHECK_REQUEST`) | `agent_label`, `kind`, `status` (inkl. `NO_RESULT`), `request_payload` (Antwort, belegte/verworfene Quellen, Token-Verbrauch), `message`, `match_id` |
 | `result_reports` | Gemeldete Ergebnisse inkl. Quelle | `source`, `source_url`, `reported_at`, Scores, `status` (PENDING_CONFIRMATION/APPLIED/REVIEW_REQUIRED/REJECTED/DUPLICATE/SUPERSEDED) |
 | `hall_of_fame` | Dauerhafter Saisonabschluss | PK `season_id`, Gewinner, Punkte, Treffer, exakte Scores, Super-Bowl-Tipp, Snapshot der Abschlusstabelle (JSONB) |
 
@@ -228,10 +226,10 @@ Ablauf `score_match(match)` (idempotent):
 `POST /api/admin/seasons/{id}/recalculate` berechnet alle Spiele einer Saison neu (z. B. nach
 Änderung der Punktewerte). VOID-Spiele bringen keine Punkte.
 
-## 7. Ergebnisverarbeitung (Admin & OpenClaw)
+## 7. Ergebnisverarbeitung (Admin & ChatGPT)
 
 ```
-Ergebnis (Admin oder Agent)
+Ergebnis (Admin oder ChatGPT-Agent)
   → Validierung (Match existiert, Teams stimmen, plausibel, schon gewertet?)
   → Match FINAL + Scores speichern
   → Punkte berechnen (score_match) → Rangliste
@@ -241,20 +239,20 @@ Ergebnis (Admin oder Agent)
   → Super Bowl? ⇒ Saison COMPLETED + Hall of Fame
 ```
 
-Agent-spezifisch (siehe [`OPENCLAW.md`](OPENCLAW.md)): Quell-Domain muss vertrauenswürdig sein,
-widersprüchliche Quellen oder abweichende Meldungen ⇒ `REVIEW_REQUIRED` + Admin-Benachrichtigung,
-optional mehrere Bestätigungen (`AGENT_MIN_CONFIRMATIONS`).
+ChatGPT-spezifisch (siehe [`CHATGPT.md`](CHATGPT.md)): Suche nur auf vertrauenswürdigen Domains,
+nur von der Websuche wirklich besuchte Quellen zählen, widersprüchliche Quellen oder abweichende
+Meldungen ⇒ `REVIEW_REQUIRED` + Admin-Benachrichtigung, mindestens `AGENT_MIN_CONFIRMATIONS`
+(Standard 2) übereinstimmende Seiten.
 
 ## 8. API-Struktur
 
-Vollständige Liste: [`API.md`](API.md); interaktiv unter `/api/docs` (OpenAPI).
+Vollständige Liste: [`API.md`](API.md); interaktiv unter `/api/docs` (OpenAPI, nur außerhalb von Produktion).
 
 | Präfix | Schutz | Inhalt |
 |---|---|---|
 | `/api/public/*`, `/api/auth/login` | keiner | Health, Konfiguration, Login |
 | `/api/me`, `/api/seasons/*`, `/api/matches/*`, `/api/chat/*`, `/api/stats/*`, `/api/hall-of-fame/*`, `/api/notifications/*` | USER oder ADMIN | Spiel-Funktionen |
 | `/api/admin/*` | ADMIN | Verwaltung |
-| `/api/agent/*` | AGENT | OpenClaw-Schnittstelle |
 | `/ws` | Token als erste Nachricht | Realtime (Chat, Live-Updates, Benachrichtigungen) |
 
 ## 9. Realtime
@@ -275,8 +273,13 @@ Vollständige Liste: [`API.md`](API.md); interaktiv unter `/api/docs` (OpenAPI).
   HTML-Ausgabe von Benutzertext, CSP- und Security-Header über Nginx.
 * Uploads: nur Rasterbilder (PNG/JPEG/WebP/GIF), Prüfung + Neukodierung mit Pillow (entfernt EXIF),
   Größenlimit, `nosniff`.
-* Rate-Limits: Nginx (pro IP) + Backend (pro Benutzer/Token, z. B. Chat, Agent).
-* Agent-Tokens nur als SHA-256-Hash gespeichert; Agent ≠ Admin.
+* Rate-Limits: Nginx (pro IP) + Backend (pro Benutzer, z. B. Chat, Passwort, Avatar); Login-Sperre
+  nur nach Fehlversuchen pro (Konto, IP). Nginx gibt nur die selbst ermittelte Client-IP weiter.
+* Uploads werden vor dem Dekodieren auf Pixelzahl geprüft und in einem Worker-Thread verarbeitet.
+* OpenAI-API-Key nur aus `.env`/Secret-Datei, nie in API-Antworten, Logs oder der Datenbank
+  (Fehlermeldungen werden geschwärzt). Keine eingehende Agent-API mehr.
+* Änderungsanträge nur bis Kickoff, Genehmigung nie nach dem Ergebnis; Entwurfs-Saisons nur für Admins.
+* WebSocket-Verbindungen werden jede Minute neu geprüft (Sperre/Abmeldung wirkt auch dort).
 * Audit-Log ist per Datenbank-Trigger gegen UPDATE/DELETE geschützt.
 * Secrets nur über `.env` (nicht im Repository). Platzhalter (`CHANGE_ME…`) werden beim ersten Start
   durch Zufallswerte ersetzt (Signaturschlüssel in `/data/.secret_key`, Admin-/Demo-Passwort im Log

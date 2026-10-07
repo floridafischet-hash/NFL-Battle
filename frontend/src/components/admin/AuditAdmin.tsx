@@ -66,7 +66,7 @@ export function AuditAdmin() {
           <option value="">Alle Akteure</option>
           <option value="USER">Benutzer</option>
           <option value="ADMIN">Admin</option>
-          <option value="AGENT">Agent (OpenClaw)</option>
+          <option value="AGENT">ChatGPT-Agent</option>
           <option value="SYSTEM">System</option>
         </Select>
         <Input placeholder="Suche (Name, Aktion, Objekt-ID)" value={q} onChange={(e) => setQ(e.target.value)} />

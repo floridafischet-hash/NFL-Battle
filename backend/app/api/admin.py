@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from datetime import datetime
@@ -12,10 +13,11 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.core.security import CurrentAdmin, DBSession, generate_agent_token, hash_password
+from app.core.config import get_settings
+from app.core.security import CurrentAdmin, DBSession, hash_password
+from app.core.text import clean_display_name
 from app.models import (
     AgentRun,
-    AgentToken,
     AuditLog,
     Bracket,
     Prediction,
@@ -30,7 +32,7 @@ from app.realtime.events import publish
 from app.schemas.common import MatchOut, SeasonOut, TeamOut
 from app.schemas.serializers import change_request_out
 from app.services import agent as agent_service
-from app.services import change_requests, match_admin
+from app.services import change_requests, match_admin, result_agent
 from app.services.audit import audit
 from app.services.brackets import load_context
 from app.services.results import apply_result, reset_result
@@ -61,11 +63,21 @@ class UserCreateIn(BaseModel):
             raise ValueError("2–32 Zeichen: a–z, 0–9, Punkt, Minus, Unterstrich")
         return v
 
+    @field_validator("display_name")
+    @classmethod
+    def _display(cls, v: str) -> str:
+        return clean_display_name(v)
+
 
 class UserUpdateIn(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     role: Literal["USER", "ADMIN"] | None = None
     is_active: bool | None = None
+
+    @field_validator("display_name")
+    @classmethod
+    def _display(cls, v: str | None) -> str | None:
+        return None if v is None else clean_display_name(v)
 
 
 class PasswordResetIn(BaseModel):
@@ -104,7 +116,7 @@ async def create_user(body: UserCreateIn, admin: CurrentAdmin, session: DBSessio
     user = User(
         username=body.username,
         display_name=body.display_name.strip(),
-        password_hash=hash_password(body.password),
+        password_hash=await asyncio.to_thread(hash_password, body.password),
         role=Role(body.role),
     )
     session.add(user)
@@ -158,7 +170,7 @@ async def update_user(
 @router.post("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
 async def reset_password(user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentAdmin, session: DBSession) -> None:
     user = await _user(session, user_id)
-    user.password_hash = hash_password(body.password)
+    user.password_hash = await asyncio.to_thread(hash_password, body.password)
     user.token_version += 1
     audit(session, admin, "USER_PASSWORD_RESET", "user", user.id, None, None, source="ADMIN")
     await session.commit()
@@ -499,26 +511,11 @@ async def reject(request_id: int, body: DecisionIn, admin: CurrentAdmin, session
     return change_request_out(cr)
 
 
-# ------------------------------------------------------------------ agent
-
-
-class AgentTokenIn(BaseModel):
-    name: str = Field(min_length=2, max_length=80)
+# ------------------------------------------------------------------ result agent (ChatGPT)
 
 
 class CheckIn(BaseModel):
-    match_ids: list[int] | None = None
-
-
-def token_out(t: AgentToken) -> dict[str, Any]:
-    return {
-        "id": t.id,
-        "name": t.name,
-        "token_prefix": t.token_prefix,
-        "created_at": t.created_at,
-        "last_used_at": t.last_used_at,
-        "revoked_at": t.revoked_at,
-    }
+    match_ids: list[int] | None = Field(default=None, max_length=13)
 
 
 def report_out(r: ResultReport) -> dict[str, Any]:
@@ -540,10 +537,26 @@ def report_out(r: ResultReport) -> dict[str, Any]:
     }
 
 
+async def agent_config(session: DBSession) -> dict[str, Any]:
+    """Configuration and usage of the result agent – never includes the API key itself."""
+    settings = get_settings()
+    return {
+        "enabled": settings.result_agent_enabled,
+        "configured": result_agent.is_configured(),
+        "has_key": bool(settings.openai_key()),
+        "model": settings.openai_model,
+        "trusted_domains": settings.trusted_domains,
+        "min_confirmations": settings.agent_min_confirmations,
+        "first_check_minutes": settings.result_agent_first_check_minutes,
+        "retry_minutes": settings.result_agent_retry_minutes,
+        "max_calls_per_day": settings.result_agent_max_calls_per_day,
+        "calls_last_24h": await result_agent.calls_last_24h(session, now_utc()),
+    }
+
+
 @router.get("/agent/overview")
 async def agent_overview(admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
     runs = (await session.execute(select(AgentRun).order_by(AgentRun.started_at.desc()).limit(50))).scalars()
-    tokens = (await session.execute(select(AgentToken).order_by(AgentToken.created_at.desc()))).scalars()
     reports = (
         (await session.execute(select(ResultReport).order_by(ResultReport.created_at.desc()).limit(50)))
         .unique()
@@ -565,51 +578,26 @@ async def agent_overview(admin: CurrentAdmin, session: DBSession) -> dict[str, A
     ]
     errors = [r for r in runs_list if r["status"] in ("ERROR", "REJECTED")]
     return {
+        "config": await agent_config(session),
         "last_run": runs_list[0] if runs_list else None,
         "runs": runs_list,
         "errors": errors[:20],
-        "tokens": [token_out(t) for t in tokens],
         "reports": [report_out(r) for r in reports],
         "review_required": sum(1 for r in runs_list if r["status"] == "REVIEW_REQUIRED"),
     }
 
 
-@router.post("/agent/tokens", status_code=status.HTTP_201_CREATED)
-async def create_agent_token(body: AgentTokenIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
-    token, prefix, digest = generate_agent_token()
-    record = AgentToken(name=body.name.strip(), token_prefix=prefix, token_hash=digest, created_by=admin.user_id)
-    session.add(record)
-    await session.flush()
-    audit(
-        session,
-        admin,
-        "AGENT_TOKEN_CREATED",
-        "agent_token",
-        record.id,
-        None,
-        {"name": record.name, "prefix": prefix},
-        source="ADMIN",
-    )
-    await session.commit()
-    return {**token_out(record), "token": token}
-
-
-@router.delete("/agent/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_agent_token(token_id: int, admin: CurrentAdmin, session: DBSession) -> None:
-    record = await session.get(AgentToken, token_id)
-    if record is None:
-        raise not_found("Token")
-    if record.revoked_at is None:
-        record.revoked_at = now_utc()
-        audit(
-            session, admin, "AGENT_TOKEN_REVOKED", "agent_token", record.id, None, {"name": record.name}, source="ADMIN"
-        )
-        await session.commit()
-
-
 @router.post("/agent/check")
 async def start_result_check(body: CheckIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
     return await agent_service.request_result_check(session, admin, body.match_ids)
+
+
+@router.post("/agent/test")
+async def test_agent_connection(admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+    result = await result_agent.test_connection()
+    audit(session, admin, "AGENT_CONNECTION_TESTED", "agent", None, None, result, source="ADMIN")
+    await session.commit()
+    return result
 
 
 @router.post("/agent/reports/{report_id}/accept")

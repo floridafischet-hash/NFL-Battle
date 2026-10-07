@@ -2,8 +2,8 @@
 
 Privates NFL-Playoff-Tippspiel für Freunde: Jeder baut seinen kompletten Playoff-Tippbaum per Klick auf
 die Teamlogos, tippt optional den Endstand, chattet live mit den anderen. Ein NFL Bot kommentiert
-Ergebnisse, Punkte und Rangliste. Ergebnisse kommen automatisch von deinem **OpenClaw**-Agent oder
-werden im Adminbereich eingetragen.
+Ergebnisse, Punkte und Rangliste. Ergebnisse sucht **ChatGPT** nach Spielende automatisch (OpenAI API
+mit Websuche, mehrfach geprüft) – oder sie werden im Adminbereich eingetragen.
 
 ![Dashboard](docs/screenshots/dashboard.jpg)
 
@@ -28,7 +28,7 @@ werden im Adminbereich eingetragen.
 7. [Benutzer & Login](#benutzer--login)
 8. [Saison durchspielen (Admin)](#eine-saison-durchspielen-admin)
 9. [Datenbank, Migrationen & Seed-Daten](#datenbank-migrationen--seed-daten)
-10. [OpenClaw-API](#openclaw-api)
+10. [ChatGPT-Ergebnisse](#chatgpt-ergebnisse)
 11. [Teamlogos & Hintergrund austauschen](#teamlogos--hintergrund-austauschen)
 12. [Backup & Restore](#backup--restore)
 13. [Update](#update)
@@ -58,8 +58,9 @@ werden im Adminbereich eingetragen.
 - **Statistiken** (Trefferquote, Serien, Runden, Saisonvergleich, Duell mit Freunden) und
   **Hall of Fame** mit ewiger Tabelle.
 - **Adminbereich**: Benutzer (anlegen, Passwort, Rolle, sperren), Saisons & Punkte, Teams & Logos,
-  **Drag-&-Drop-Bracket-Setup**, Spielsteuerung, Ergebnisse, Anträge, OpenClaw-Status, Audit-Log.
-- **OpenClaw-Schnittstelle** mit eigenem Token (Rolle AGENT), Quellenprüfung und Review-Workflow.
+  **Drag-&-Drop-Bracket-Setup**, Spielsteuerung, Ergebnisse, Anträge, ChatGPT-Status, Audit-Log.
+- **ChatGPT-Ergebnis-Agent** im Backend: sucht Endergebnisse auf vertrauenswürdigen Sportseiten, prüft
+  Quellen (nur wirklich besuchte Seiten, mind. zwei übereinstimmende), Review-Workflow für Zweifelsfälle.
 - **Audit-Log** aller kritischen Aktionen (append-only).
 - Responsive: Desktop zuerst, Tablet und Smartphone mit Mobile-Menü und scrollbarem Bracket.
 
@@ -69,7 +70,8 @@ werden im Adminbereich eingetragen.
 Browser ──HTTPS──▶ Traefik (Let's Encrypt) ──▶ Nginx ─┬─ /            → Frontend (Next.js)
                                                        └─ /api /ws /media → Backend (FastAPI)
                                                                               │
-OpenClaw ──Bearer nbb_…──▶ /api/agent/*                                      ▼
+                                       OpenAI API (ChatGPT + Websuche) ◀── Ergebnis-Agent
+                                                                              ▼
                                                                          PostgreSQL 16
 ```
 
@@ -83,14 +85,14 @@ OpenClaw ──Bearer nbb_…──▶ /api/agent/*                             
 | Deployment | Docker Compose, Nginx, Traefik + Let's Encrypt |
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (Datenmodell, Rollen, Bracket- und Punktelogik) ·
-[docs/API.md](docs/API.md) · [docs/OPENCLAW.md](docs/OPENCLAW.md) · [docs/DECISIONS.md](docs/DECISIONS.md)
+[docs/API.md](docs/API.md) · [docs/CHATGPT.md](docs/CHATGPT.md) · [docs/DECISIONS.md](docs/DECISIONS.md)
 
 ```
 backend/    FastAPI-App (app/), Migrationen (alembic/), Tests (tests/)
 frontend/   Next.js-App (src/), Teamlogos & Hintergrund (public/), Playwright-Tests (e2e/)
 nginx/      Reverse-Proxy-Konfiguration
 scripts/    generate-secrets, backup, restore, update, e2e, Logo-/Hintergrund-Generatoren
-docs/       Architektur, API, OpenClaw, Entscheidungen, Screenshots
+docs/       Architektur, API, ChatGPT-Agent, Entscheidungen, Screenshots
 ```
 
 ## Voraussetzungen
@@ -119,7 +121,8 @@ Admin und – mit `SEED_DEMO_DATA=true` – ein komplettes Demo-Dashboard an.
   ```bash
   docker compose logs migrate
   # Initialer Admin: Benutzername 'admin', Passwort '…'
-  # Demo-Benutzer (florian, dennis, stefan, marcel, lisa, kevin, tobi) – Passwort '…'
+  # Demo-Benutzer (bitte Passwörter weitergeben, danach ändern lassen):
+  #   florian: …   dennis: …   (jeder Benutzer bekommt ein eigenes Passwort)
   ```
 
 Status prüfen: `docker compose ps` – alle Dienste sollten `healthy` sein (`migrate` ist ein
@@ -137,12 +140,14 @@ einmaliger Job und steht danach auf `exited (0)`).
 | `TOKEN_TTL_DAYS` | `30` | wie lange ein Login gültig bleibt |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_DISPLAY_NAME` | `admin` / – / `Admin` | erster Admin (nur beim allerersten Start) |
 | `SEED_DEMO_DATA` | `true` | Demo-Saisons + Demo-Benutzer anlegen, solange noch keine Saison existiert |
-| `DEMO_USER_PASSWORD` | – | gemeinsames Passwort der Demo-Benutzer |
+| `DEMO_USER_PASSWORD` | – | optional gemeinsames Passwort der Demo-Benutzer (sonst bekommt jeder ein eigenes) |
 | `MAX_UPLOAD_MB` | `5` | max. Bildgröße (Chat, Avatar, Logos) |
-| `AGENT_TRUSTED_DOMAINS` | nfl.com, espn.com, … | erlaubte Ergebnis-Quellen für OpenClaw |
-| `AGENT_MIN_CONFIRMATIONS` | `1` | so viele unabhängige Quellen, bevor automatisch gewertet wird |
+| `OPENAI_API_KEY` | leer | **geheim** – OpenAI-API-Key für den ChatGPT-Ergebnis-Agenten (nur in `.env`, nie ins Git); leer = Agent aus |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | Modell mit Websuche |
+| `RESULT_AGENT_MAX_CALLS_PER_DAY` | `40` | Kostenbremse für OpenAI-Abfragen |
+| `AGENT_TRUSTED_DOMAINS` | nfl.com, espn.com, … | Seiten, auf denen ChatGPT sucht und die als Quelle zählen |
+| `AGENT_MIN_CONFIRMATIONS` | `2` | übereinstimmende Quellen verschiedener Seiten, bevor automatisch gewertet wird |
 | `AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF` | `60` | Ergebnisse frühestens so lange nach Kickoff |
-| `OPENCLAW_WEBHOOK_URL` / `OPENCLAW_WEBHOOK_TOKEN` | leer | optionaler Webhook für „Ergebnisprüfung starten“ |
 | `REMINDER_HOURS_BEFORE_LOCK` | `24` | NFL Bot erinnert an fehlende Tipps |
 | `DOMAIN` / `ACME_EMAIL` | – | nur für HTTPS mit Traefik |
 
@@ -176,7 +181,8 @@ Die App hat eine **eigene, einfache Benutzerverwaltung** (kein Keycloak nötig):
 - Passwörter werden nur gehasht gespeichert (PBKDF2-SHA256), der Login ist gegen Durchprobieren
   rate-limitiert.
 
-Rollen: **USER** (Spieler), **ADMIN** (Verwaltung), **AGENT** (nur OpenClaw-Token, nur `/api/agent/*`).
+Rollen: **USER** (Spieler) und **ADMIN** (Verwaltung). Es gibt keinen Maschinen-Zugang von außen – der
+ChatGPT-Ergebnis-Agent läuft im Backend.
 
 ## Eine Saison durchspielen (Admin)
 
@@ -186,9 +192,10 @@ Rollen: **USER** (Spieler), **ADMIN** (Verwaltung), **AGENT** (nur OpenClaw-Toke
    Alternativ Teams direkt in die Match-Slots ziehen und *„Paarungen veröffentlichen“*.
 3. **Admin → Saisons**: Saison **aktivieren**.
 4. **Admin → Spiele**: Kickoff-Zeiten setzen (Tipp-Lock folgt automatisch; Minuten vor Kickoff
-   konfigurierbar) – oder OpenClaw übermittelt den Spielplan.
+   konfigurierbar).
 5. Spieler tippen unter **Mein Bracket** und geben ab.
-6. Ergebnisse: automatisch per OpenClaw oder **Admin → Spiele → „Ergebnis eintragen“**. Danach laufen
+6. Ergebnisse: automatisch per ChatGPT (**Admin → ChatGPT**, „Jetzt prüfen“ startet sofort) oder
+   **Admin → Spiele → „Ergebnis eintragen“**. Danach laufen
    automatisch: Punkte → Rangliste → NFL Bot → **nächste Runde** (inkl. Reseeding) → Benachrichtigungen.
 7. Nach dem Super Bowl wird die Saison abgeschlossen und in die **Hall of Fame** übernommen.
 
@@ -213,22 +220,20 @@ Nach Änderungen am Punktesystem: **Saisons → „Punkte neu berechnen“**.
 - Demo-Daten entfernen = Neustart mit leerer DB: `docker compose down -v` (**löscht alle Daten!**),
   `SEED_DEMO_DATA=false` setzen, `docker compose up -d`.
 
-## OpenClaw-API
+## ChatGPT-Ergebnisse
 
-Kurzfassung (Details und Beispiele: **[docs/OPENCLAW.md](docs/OPENCLAW.md)**):
+Kurzfassung (Details: **[docs/CHATGPT.md](docs/CHATGPT.md)**):
 
-1. Admin → OpenClaw → **Token erstellen** (`nbb_…`, nur einmal sichtbar).
-2. OpenClaw fragt `GET /api/agent/matches/pending` ab und meldet Ergebnisse:
-   ```http
-   POST /api/agent/results
-   Authorization: Bearer nbb_…
-   {"match_id": 34, "home_team": "BUF", "away_team": "BAL", "home_score": 24, "away_score": 27,
-    "winner": "BAL", "source": "ESPN", "source_url": "https://www.espn.com/nfl/game/_/gameId/…",
-    "timestamp": "2027-01-18T00:41:00Z"}
-   ```
-3. Das Backend prüft Match, Teams, Plausibilität, Doppelmeldungen und Quellen. Gültig → `APPLIED`
-   (Punkte, Rangliste, Bot, nächste Runde, Audit). Unklar oder widersprüchlich → `REVIEW_REQUIRED`
-   und der Admin wird benachrichtigt.
+1. API-Key auf <https://platform.openai.com/api-keys> erstellen (eigenes Projekt mit Budget-Limit).
+2. **Nur auf dem Server** in die `.env` eintragen: `OPENAI_API_KEY=sk-…` → `docker compose up -d backend`.
+3. Admin → **ChatGPT** → „Verbindung testen“.
+
+Ab dann sucht das Backend nach jedem Spiel (Standard: 200 Minuten nach Kickoff, danach alle 20 Minuten)
+das Endergebnis über die OpenAI API mit Websuche – nur auf den Seiten aus `AGENT_TRUSTED_DOMAINS`.
+Gezählt werden nur Quellen, die die Websuche wirklich besucht hat; erst wenn zwei verschiedene Seiten
+denselben Spielstand zeigen, wird gewertet. Unklare Fälle landen als „Prüfung erforderlich“ beim Admin,
+gewertete Spiele werden nie automatisch überschrieben. Ohne Key trägst du Ergebnisse unter
+**Admin → Spiele** ein.
 
 ## Teamlogos & Hintergrund austauschen
 
@@ -274,9 +279,9 @@ PROD=1 ./scripts/update.sh     # mit HTTPS-Overlay
 
 | Bereich | Befehl | Inhalt |
 |---|---|---|
-| Backend (Unit + API, echte PostgreSQL) | `cd backend && pytest` | Login, Bracket-Logik, Weiterrücken, Reseeding, Tipp-Lock, Änderungsanträge, Punkte, exakter Score, Super-Bowl-Bonus, Ergebniskorrektur, Neuberechnung, Admin-/Agent-Rechte, Agent-Validierung, Chat & WebSocket, Uploads, Audit-Log |
+| Backend (Unit + API, echte PostgreSQL) | `cd backend && pytest` | Login, Bracket-Logik, Weiterrücken, Reseeding, Tipp-Lock, Änderungsanträge, Punkte, exakter Score, Super-Bowl-Bonus, Ergebniskorrektur, Neuberechnung, Admin-Rechte, ChatGPT-Agent (OpenAI gemockt) inkl. Quellenprüfung, Login-Sperre, Uploads, Chat & WebSocket, Audit-Log |
 | Frontend (Unit) | `cd frontend && npm test` | Formatierung, Bracket-Hilfsfunktionen |
-| End-to-End / Abnahme | `./scripts/e2e.sh` | startet einen **frischen** Stack ohne Demo-Daten und spielt eine komplette Saison durch (UI + Agent), inkl. Smartphone-Test |
+| End-to-End / Abnahme | `./scripts/e2e.sh` | startet einen **frischen** Stack ohne Demo-Daten und spielt eine komplette Saison durch (UI + ChatGPT-Agent gegen einen lokalen OpenAI-Mock), inkl. Smartphone-Test |
 
 Backend-Tests brauchen eine PostgreSQL-Datenbank:
 ```bash
@@ -291,11 +296,12 @@ TEST_DATABASE_URL="postgresql+psycopg://postgres:test@localhost:5433/nfl_test" p
 # Datenbank
 docker run -d --name nbb-devdb -p 5432:5432 -e POSTGRES_USER=nfl -e POSTGRES_PASSWORD=nfl -e POSTGRES_DB=nfl postgres:16-alpine
 
-# Backend (http://localhost:8000, API-Doku unter /api/docs)
+# Backend (http://localhost:8000, API-Doku unter /api/docs – nur außerhalb von APP_ENV=production)
 cd backend
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt
 export DATABASE_URL=postgresql+psycopg://nfl:nfl@localhost:5432/nfl DATA_DIR=./.data UPLOAD_DIR=./.data/uploads \
-       ADMIN_PASSWORD=admin123 DEMO_USER_PASSWORD=demo123 SEED_DEMO_DATA=true
+       APP_ENV=development ADMIN_PASSWORD="$(openssl rand -base64 12)" SEED_DEMO_DATA=true
+echo "Admin-Passwort: $ADMIN_PASSWORD"
 alembic upgrade head && python -m app.seed
 uvicorn app.main:app --reload --port 8000
 
@@ -328,18 +334,20 @@ Die Anwendung ist so gebaut, dass sie ohne Umbau auf Kubernetes läuft:
 | Alle nach Neustart abgemeldet | `SECRET_KEY` geändert oder Volume `app-data` gelöscht – fest in `.env` setzen. |
 | Let's Encrypt schlägt fehl | DNS zeigt nicht auf den Server, Port 80 blockiert oder Rate-Limit von Let's Encrypt; `docker compose logs traefik`. |
 | Port 8080 belegt | `HTTP_PORT=8090` in `.env` |
-| Ergebnis von OpenClaw kommt nicht an | Admin → OpenClaw: letzter Lauf und Fehler prüfen; `REVIEW_REQUIRED`-Meldungen dort übernehmen. Quelle muss in `AGENT_TRUSTED_DOMAINS` stehen. |
+| ChatGPT trägt kein Ergebnis ein | Admin → ChatGPT: Status („kein API-Key“?), „Verbindung testen“, letzter Lauf und Fehler prüfen; `REVIEW_REQUIRED`-Meldungen dort übernehmen. Tageslimit (`RESULT_AGENT_MAX_CALLS_PER_DAY`) erreicht? |
 | Spiel lässt sich nicht tippen | Spiel ist gesperrt (Deadline) → im Spiel „Änderung beantragen“; oder Paarung steht noch nicht fest (Vorrunde tippen). |
 | Ergebniskorrektur wird abgelehnt (409) | Das Folgespiel ist bereits gesperrt/gewertet – zuerst dessen Ergebnis zurücksetzen bzw. Paarung im Bracket-Setup anpassen. |
 | Logs ansehen | `docker compose logs -f backend` (bzw. `frontend`, `nginx`, `db`) |
 
 ## Projektstatus
 
-Alle Phasen der Aufgabenliste sind umgesetzt und getestet (75 Backend-Tests, 5 Frontend-Unit-Tests,
+Alle Phasen der Aufgabenliste sind umgesetzt und getestet (88 Backend-Tests, 5 Frontend-Unit-Tests,
 15 End-to-End-Tests inkl. kompletter Saison). Umgesetzte Abweichungen und Grenzen:
 
 - **Keycloak wurde auf Wunsch durch eine eingebaute Benutzerverwaltung ersetzt** (siehe
   [DECISIONS.md](docs/DECISIONS.md)).
+- **Der OpenClaw-Zugang wurde auf Wunsch entfernt**; Ergebnisse sucht jetzt der ChatGPT-Agent im
+  Backend (OpenAI-API-Key nötig, sonst manuelle Eingabe) – siehe [CHATGPT.md](docs/CHATGPT.md).
 - Benachrichtigungen erscheinen in der App (Glocke, Chat, Toasts); E-Mail/Push ist nicht umgesetzt.
 - Mitgelieferte Teamlogos sind neutrale Wappen in Teamfarben; offizielle Logos können hochgeladen
   oder per Datei ausgetauscht werden.

@@ -1,4 +1,6 @@
-"""OpenClaw agent integration: validated result intake with provenance and review workflow."""
+"""Result intake pipeline: validation, provenance and admin review for results found by the
+ChatGPT result agent (app.services.result_agent). Nothing here is reachable from outside – the
+pipeline is only called in-process."""
 
 from __future__ import annotations
 
@@ -6,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
@@ -15,11 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.security import Principal
 from app.models import AgentRun, Match, ResultReport, Team
-from app.models.enums import AgentRunStatus, MatchStatus, ReportStatus, ResultSource, SystemMessageType
-from app.realtime.events import publish
-from app.services import bot
+from app.models.enums import AgentRunStatus, MatchStatus, ReportStatus, ResultSource
 from app.services.audit import audit
-from app.services.match_admin import compute_lock_at
 from app.services.notifications import notify_admins
 from app.services.results import apply_result
 from app.services.seasons import is_locked, match_label, now_utc
@@ -53,22 +51,6 @@ class AgentResultIn(BaseModel):
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("source_url muss eine http(s)-URL sein")
         return v
-
-
-class AgentScheduleIn(BaseModel):
-    match_id: int
-    kickoff_at: datetime
-    venue: str | None = Field(default=None, max_length=120)
-    source: str = Field(min_length=1, max_length=120)
-    source_url: str | None = Field(default=None, max_length=500)
-
-
-class AgentEventIn(BaseModel):
-    match_id: int
-    type: str = Field(pattern="^(HALFTIME)$")
-    home_score: int = Field(ge=0, le=99)
-    away_score: int = Field(ge=0, le=99)
-    source: str = Field(min_length=1, max_length=120)
 
 
 def domain_of(url: str | None) -> str | None:
@@ -113,7 +95,6 @@ class AgentReject(Exception):
 def _new_run(principal: Principal, kind: str, payload: Any) -> AgentRun:
     return AgentRun(
         agent_label=principal.label[:120],
-        agent_token_id=principal.agent_token_id,
         kind=kind,
         status=AgentRunStatus.ERROR,
         request_payload=payload if isinstance(payload, dict) else {"raw": str(payload)[:2000]},
@@ -151,10 +132,14 @@ async def _record_failure(
     return run
 
 
-async def process_result(session: AsyncSession, principal: Principal, payload: Any) -> tuple[int, dict[str, Any]]:
-    """Validate and process a result reported by the agent.
+async def process_result(
+    session: AsyncSession, principal: Principal, payload: Any, force_review: str | None = None
+) -> tuple[int, dict[str, Any]]:
+    """Validate and process a result found by the result agent.
 
-    Returns (http status, body). Every call is recorded in agent_runs.
+    ``force_review`` sends a plausible result to the admin instead of applying it (e.g. when no
+    source was backed by the web search). Returns (status code, body); every call is recorded in
+    agent_runs.
     """
     try:
         data = AgentResultIn.model_validate(payload)
@@ -166,7 +151,7 @@ async def process_result(session: AsyncSession, principal: Principal, payload: A
         return 422, {"status": "REJECTED", "run_id": run.id, "message": run.message}
 
     try:
-        return await _process_valid_result(session, principal, data, payload)
+        return await _process_valid_result(session, principal, data, payload, force_review)
     except AgentReject as exc:
         run = await _record_failure(
             session,
@@ -193,7 +178,7 @@ async def process_result(session: AsyncSession, principal: Principal, payload: A
             session, run, principal, data, data.home_score, data.away_score, ReportStatus.REVIEW_REQUIRED, message
         )
         await notify_admins(
-            session, "REVIEW_REQUIRED", "OpenClaw-Ergebnis muss geprüft werden", message, "/admin?tab=agent"
+            session, "REVIEW_REQUIRED", "ChatGPT-Ergebnis muss geprüft werden", message, "/admin?tab=agent"
         )
         audit(
             session,
@@ -241,7 +226,7 @@ async def _create_report(
 
 
 async def _process_valid_result(
-    session: AsyncSession, principal: Principal, data: AgentResultIn, payload: Any
+    session: AsyncSession, principal: Principal, data: AgentResultIn, payload: Any, force_review: str | None = None
 ) -> tuple[int, dict[str, Any]]:
     settings = get_settings()
     now = now_utc()
@@ -316,7 +301,7 @@ async def _process_valid_result(
         run.finished_at = now_utc()
         if notify:
             await notify_admins(
-                session, "REVIEW_REQUIRED", f"OpenClaw-Ergebnis prüfen: {match_label(match)}", full, "/admin?tab=agent"
+                session, "REVIEW_REQUIRED", f"ChatGPT-Ergebnis prüfen: {match_label(match)}", full, "/admin?tab=agent"
             )
         audit(
             session,
@@ -351,6 +336,9 @@ async def _process_valid_result(
             202,
             True,
         )
+
+    if force_review:
+        return await finish(AgentRunStatus.REVIEW_REQUIRED, ReportStatus.REVIEW_REQUIRED, force_review, 202, True)
 
     # Source validation
     if not is_trusted(data.source_url):
@@ -478,12 +466,11 @@ def pending_match_filter(now: datetime):
 async def request_result_check(
     session: AsyncSession, principal: Principal, match_ids: list[int] | None
 ) -> dict[str, Any]:
-    """Admin action 'Ergebnisprüfung starten': flag matches and (optionally) trigger OpenClaw's webhook."""
-    settings = get_settings()
+    """Admin action 'Jetzt prüfen': flag matches; the result agent researches them on its next tick."""
     now = now_utc()
     stmt = select(Match)
     stmt = stmt.where(Match.id.in_(match_ids)) if match_ids else stmt.where(pending_match_filter(now))
-    matches = list((await session.execute(stmt)).unique().scalars())
+    matches = [m for m in (await session.execute(stmt)).unique().scalars() if m.teams_known]
     for m in matches:
         m.result_check_requested_at = now
     run = AgentRun(
@@ -493,31 +480,7 @@ async def request_result_check(
         request_payload={"match_ids": [m.id for m in matches]},
         ip_address=principal.ip,
     )
-    webhook = "nicht konfiguriert – OpenClaw holt die Spiele beim nächsten Abruf von /api/agent/matches/pending"
-    if settings.openclaw_webhook_url:
-        try:
-            headers = (
-                {"Authorization": f"Bearer {settings.openclaw_webhook_token}"}
-                if settings.openclaw_webhook_token
-                else {}
-            )
-            async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.post(
-                    settings.openclaw_webhook_url,
-                    json={
-                        "event": "result_check_requested",
-                        "match_ids": [m.id for m in matches],
-                        "pending_url": f"{settings.public_url}/api/agent/matches/pending",
-                    },
-                    headers=headers,
-                )
-            webhook = f"Webhook ausgelöst (HTTP {response.status_code})"
-            if response.status_code >= 400:
-                run.status = AgentRunStatus.ERROR
-        except httpx.HTTPError as exc:
-            webhook = f"Webhook fehlgeschlagen: {exc.__class__.__name__}"
-            run.status = AgentRunStatus.ERROR
-    run.message = f"{len(matches)} Spiel(e) zur Prüfung markiert. {webhook}"
+    run.message = f"{len(matches)} Spiel(e) zur Prüfung durch ChatGPT markiert."
     run.finished_at = now_utc()
     session.add(run)
     audit(
@@ -527,124 +490,8 @@ async def request_result_check(
         "agent_run",
         None,
         None,
-        {"match_ids": [m.id for m in matches], "webhook": webhook},
+        {"match_ids": [m.id for m in matches]},
         source="ADMIN",
     )
     await session.commit()
     return {"matches": len(matches), "message": run.message, "run_id": run.id}
-
-
-async def set_schedule(session: AsyncSession, principal: Principal, payload: Any) -> tuple[int, dict[str, Any]]:
-    try:
-        data = AgentScheduleIn.model_validate(payload)
-    except ValidationError as exc:
-        run = await _record_failure(
-            session,
-            principal,
-            "SCHEDULE",
-            payload,
-            AgentRunStatus.REJECTED,
-            f"Ungültige Nutzlast: {exc.errors()[0]['msg']}",
-        )
-        return 422, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    match = (
-        (await session.execute(select(Match).where(Match.id == data.match_id).with_for_update(of=Match)))
-        .unique()
-        .scalar_one_or_none()
-    )
-    kickoff = _ensure_utc(data.kickoff_at)
-    if match is None:
-        run = await _record_failure(
-            session, principal, "SCHEDULE", payload, AgentRunStatus.REJECTED, "Match existiert nicht."
-        )
-        return 404, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    if is_locked(match) or match.status != MatchStatus.OPEN:
-        run = await _record_failure(
-            session,
-            principal,
-            "SCHEDULE",
-            payload,
-            AgentRunStatus.REJECTED,
-            "Match ist bereits gesperrt – Termin wird nicht geändert.",
-            match.id,
-        )
-        return 409, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    if kickoff is None or kickoff <= now_utc():
-        run = await _record_failure(
-            session,
-            principal,
-            "SCHEDULE",
-            payload,
-            AgentRunStatus.REJECTED,
-            "Kickoff muss in der Zukunft liegen.",
-            match.id,
-        )
-        return 422, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    old = {"kickoff_at": match.kickoff_at.isoformat() if match.kickoff_at else None, "venue": match.venue}
-    match.kickoff_at = kickoff
-    match.lock_at = compute_lock_at(match.season, kickoff)
-    if data.venue:
-        match.venue = data.venue
-    run = _new_run(principal, "SCHEDULE", payload)
-    run.status = AgentRunStatus.OK
-    run.match_id = match.id
-    run.message = f"Kickoff gesetzt: {bot.local_time(kickoff)}"
-    run.finished_at = now_utc()
-    session.add(run)
-    audit(
-        session,
-        principal,
-        "AGENT_SCHEDULE_SET",
-        "match",
-        match.id,
-        old,
-        {"kickoff_at": kickoff.isoformat(), "venue": match.venue, "source": data.source, "source_url": data.source_url},
-        source="AGENT",
-    )
-    await publish(session, "match_updated", season_id=match.season_id, match_id=match.id)
-    await session.commit()
-    return 200, {"status": "OK", "run_id": run.id, "message": run.message}
-
-
-async def post_event(session: AsyncSession, principal: Principal, payload: Any) -> tuple[int, dict[str, Any]]:
-    try:
-        data = AgentEventIn.model_validate(payload)
-    except ValidationError as exc:
-        run = await _record_failure(
-            session,
-            principal,
-            "EVENT",
-            payload,
-            AgentRunStatus.REJECTED,
-            f"Ungültige Nutzlast: {exc.errors()[0]['msg']}",
-        )
-        return 422, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    match = await session.get(Match, data.match_id)
-    if match is None or not match.teams_known or match.status == MatchStatus.FINAL:
-        run = await _record_failure(
-            session,
-            principal,
-            "EVENT",
-            payload,
-            AgentRunStatus.REJECTED,
-            "Match existiert nicht oder ist bereits beendet.",
-        )
-        return 409, {"status": "REJECTED", "run_id": run.id, "message": run.message}
-    text = f"HALBZEIT\n{match.home_team.short_name} {data.home_score} : {data.away_score} {match.away_team.short_name}"
-    posted = await bot.post(
-        session,
-        SystemMessageType.HALFTIME,
-        text,
-        {"match": bot.match_payload(match), "home_score": data.home_score, "away_score": data.away_score},
-        season_id=match.season_id,
-        match_id=match.id,
-        dedupe_key=f"HALFTIME:{match.id}",
-    )
-    run = _new_run(principal, "EVENT", payload)
-    run.status = AgentRunStatus.OK if posted else AgentRunStatus.DUPLICATE
-    run.match_id = match.id
-    run.message = "Halbzeit gepostet" if posted else "Halbzeit wurde bereits gepostet"
-    run.finished_at = now_utc()
-    session.add(run)
-    await session.commit()
-    return 200, {"status": run.status.value, "run_id": run.id, "message": run.message}

@@ -53,6 +53,10 @@ async def create_request(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Für gewertete oder annullierte Spiele sind keine Änderungen möglich."
         )
+    if match.kickoff_at is not None and now_utc() >= match.kickoff_at:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Das Spiel läuft bereits – Änderungsanträge sind nicht mehr möglich."
+        )
     if not match.teams_known or winner_team_id not in (match.home_team_id, match.away_team_id):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Dieses Team spielt nicht in dieser Partie.")
     winner_score, loser_score = _validate_scores(season, winner_score, loser_score)
@@ -134,6 +138,10 @@ async def approve(session: AsyncSession, principal: Principal, request_id: int, 
     season = await lock_season(session, match.season_id)
     if match.status == MatchStatus.VOID:
         raise HTTPException(status.HTTP_409_CONFLICT, "Das Spiel wurde annulliert.")
+    if match.status == MatchStatus.FINAL:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Das Spiel ist bereits gewertet – der Antrag kann nur abgelehnt werden."
+        )
     if not match.teams_known or cr.new_winner_team_id not in (match.home_team_id, match.away_team_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "Der beantragte Tipp passt nicht mehr zur Paarung.")
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -10,6 +11,9 @@ from app.models import Match, Season, SeasonTeam, Team
 from app.models.enums import MatchStatus, SeasonStatus
 from app.schemas.common import MatchOut, TeamOut
 from app.services.bracket_engine import ROUND_LABELS, SLOTS, MatchState, TeamSeed, slots_in_resolution_order
+
+if TYPE_CHECKING:
+    from app.core.security import Principal
 
 
 def now_utc() -> datetime:
@@ -45,9 +49,13 @@ async def get_current_season(session: AsyncSession) -> Season | None:
     ).scalar_one_or_none()
 
 
-async def resolve_season(session: AsyncSession, season_id: int | None) -> Season:
+async def resolve_season(session: AsyncSession, season_id: int | None, principal: Principal | None = None) -> Season:
+    """Season by id (or the current one). Draft seasons are only visible to admins."""
     if season_id is not None:
-        return await get_season(session, season_id)
+        season = await get_season(session, season_id)
+        if season.status == SeasonStatus.DRAFT and not (principal is not None and principal.is_admin):
+            raise not_found("Saison")
+        return season
     season = await get_current_season(session)
     if season is None:
         raise not_found("Aktive Saison")

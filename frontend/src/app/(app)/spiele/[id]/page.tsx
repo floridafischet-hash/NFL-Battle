@@ -224,7 +224,7 @@ export default function MatchPage() {
               {String(c.hours).padStart(2, "0")}:{String(c.minutes).padStart(2, "0")}:{String(c.seconds).padStart(2, "0")}
             </span>
           )}
-          {final && m.result_source && <span className="text-xs text-slate-500">Ergebnis via {m.result_source === "AGENT" ? "OpenClaw" : "Admin"}</span>}
+          {final && m.result_source && <span className="text-xs text-slate-500">Ergebnis via {m.result_source === "AGENT" ? "ChatGPT" : "Admin"}</span>}
         </div>
       </section>
 

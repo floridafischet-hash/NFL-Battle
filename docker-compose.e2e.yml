@@ -1,0 +1,15 @@
+# Only for the end-to-end test (scripts/e2e.sh): replaces the OpenAI API with a local mock so the
+# ChatGPT result agent can be tested without a real API key.
+services:
+  openai-mock:
+    image: python:3.13-alpine
+    command: ["python", "/mock/openai_mock.py"]
+    volumes:
+      - ./scripts/openai_mock.py:/mock/openai_mock.py:ro
+    ports:
+      - "127.0.0.1:${E2E_MOCK_PORT:-8091}:8000"
+
+  backend:
+    depends_on:
+      openai-mock:
+        condition: service_started

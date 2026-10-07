@@ -144,20 +144,20 @@ def _uid(value: str, principal) -> uuid.UUID:
 @router.get("/stats/users/{user_id}")
 async def user_stats(user_id: str, principal: CurrentUser, session: DBSession, season_id: int | None = None):
     uid = _uid(user_id, principal)
-    season = await resolve_season(session, season_id) if season_id else await get_current_season(session)
+    season = await resolve_season(session, season_id, principal) if season_id else await get_current_season(session)
     return await stats.user_stats(session, uid, season.id if season else None)
 
 
 @router.get("/stats/compare")
 async def compare(principal: CurrentUser, session: DBSession, a: str, b: str, season_id: int | None = None):
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     ua, ub = _uid(a, principal), _uid(b, principal)
     return await stats.compare_users(session, ua, ub, season.id)
 
 
 @router.get("/stats/overview")
 async def overview(principal: CurrentUser, session: DBSession, season_id: int | None = None):
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     return await stats.season_overview(session, season.id)
 
 
@@ -181,6 +181,9 @@ async def list_players(principal: CurrentUser, session: DBSession) -> list[dict[
 # ------------------------------------------------------------------ websocket
 
 ws_router = APIRouter()
+
+
+WS_REVALIDATE_SECONDS = 60
 
 
 @ws_router.websocket("/ws")
@@ -220,7 +223,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "pong"})
 
     async def expiry() -> None:
-        await asyncio.sleep(max(1.0, expires_at - time.time()))
+        # ends the connection when the token expires or the account was blocked, demoted or logged out
+        while time.time() < expires_at:
+            await asyncio.sleep(min(WS_REVALIDATE_SECONDS, max(1.0, expires_at - time.time())))
+            try:
+                async with get_sessionmaker()() as session:
+                    current = await authenticate(token, session)
+            except AuthError:
+                return
+            conn.is_admin = current.is_admin
 
     tasks = [asyncio.create_task(t()) for t in (sender, receiver, expiry)]
     try:

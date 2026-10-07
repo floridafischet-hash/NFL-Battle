@@ -134,7 +134,7 @@ function MatchRow({ m, onResult }: { m: AdminMatch; onResult: () => void }) {
         <StatusBadge match={m} />
         <Badge tone="neutral">{m.picks} Tipps</Badge>
         {m.review_required > 0 && <Badge tone="amber">Prüfung nötig</Badge>}
-        {m.result_source && <Badge tone="neutral">via {m.result_source === "AGENT" ? "OpenClaw" : "Admin"}</Badge>}
+        {m.result_source && <Badge tone="neutral">via {m.result_source === "AGENT" ? "ChatGPT" : "Admin"}</Badge>}
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
         <Input type="datetime-local" label="Kickoff" value={kickoff} onChange={(e) => setKickoff(e.target.value)} />

@@ -1,4 +1,4 @@
-from app.models.agent import AgentRun, AgentToken, ResultReport
+from app.models.agent import AgentRun, ResultReport
 from app.models.base import Base
 from app.models.bracket import Bracket, HallOfFame, Leaderboard, Prediction, PredictionChange, Score
 from app.models.season import Match, Season, SeasonTeam, Team
@@ -7,7 +7,6 @@ from app.models.user import User
 
 __all__ = [
     "AgentRun",
-    "AgentToken",
     "AuditLog",
     "Base",
     "Bracket",

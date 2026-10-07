@@ -32,7 +32,7 @@ function Overview({ summary, go }: { summary: Summary | undefined; go: (t: Tab) 
   if (!summary) return <Loading />;
   const tiles = [
     { label: "Offene Änderungsanträge", value: summary.pending_change_requests, tab: "requests" as Tab, icon: FileClock, tone: summary.pending_change_requests ? ("afc" as const) : undefined },
-    { label: "Agent-Ergebnisse zu prüfen", value: summary.review_required, tab: "agent" as Tab, icon: ShieldAlert, tone: summary.review_required ? ("afc" as const) : undefined },
+    { label: "ChatGPT-Ergebnisse zu prüfen", value: summary.review_required, tab: "agent" as Tab, icon: ShieldAlert, tone: summary.review_required ? ("afc" as const) : undefined },
     { label: "Benutzer", value: summary.users, tab: "users" as Tab, icon: Users, tone: undefined },
   ];
   return (
@@ -44,14 +44,14 @@ function Overview({ summary, go }: { summary: Summary | undefined; go: (t: Tab) 
           </button>
         ))}
       </div>
-      <Card title={<span className="flex items-center gap-2"><Bot className="size-4 text-gold" /> OpenClaw</span>}>
+      <Card title={<span className="flex items-center gap-2"><Bot className="size-4 text-gold" /> ChatGPT-Ergebnisse</span>}>
         {summary.last_agent_run ? (
           <p className="text-sm text-slate-300">
             Letzter Lauf ({summary.last_agent_run.kind}) {relativeTime(summary.last_agent_run.started_at)}: <strong>{summary.last_agent_run.status}</strong> –{" "}
             {summary.last_agent_run.message}
           </p>
         ) : (
-          <p className="text-sm text-slate-400">Noch kein Agent-Lauf.</p>
+          <p className="text-sm text-slate-400">Noch kein ChatGPT-Lauf.</p>
         )}
       </Card>
       <Card title="Ablauf einer Saison">
@@ -59,7 +59,7 @@ function Overview({ summary, go }: { summary: Summary | undefined; go: (t: Tab) 
           <li>Saisons: Saison erstellen und Punktesystem festlegen.</li>
           <li>Bracket-Setup: Setzliste per Drag &amp; Drop füllen, speichern, „Wild Card erzeugen“.</li>
           <li>Saisons: Saison aktivieren. Spiele: Kickoff-Zeiten setzen (Tipp-Lock folgt automatisch).</li>
-          <li>Ergebnisse kommen von OpenClaw oder werden unter „Spiele“ eingetragen – Punkte, Rangliste, NFL Bot und nächste Runde laufen automatisch.</li>
+          <li>Ergebnisse sucht ChatGPT automatisch (oder du trägst sie unter „Spiele“ ein) – Punkte, Rangliste, NFL Bot und nächste Runde laufen automatisch.</li>
           <li>Nach dem Super Bowl wird die Saison abgeschlossen und in die Hall of Fame übernommen.</li>
         </ol>
       </Card>
@@ -89,7 +89,7 @@ function AdminInner() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Admin" subtitle="Verwaltung von Benutzern, Saisons, Teams, Spielen, Tipps, Punkten, OpenClaw und Audit-Log.">
+      <PageHeader title="Admin" subtitle="Verwaltung von Benutzern, Saisons, Teams, Spielen, Tipps, Punkten, ChatGPT-Ergebnissen und Audit-Log.">
         {needsSeason && (seasons.data?.length ?? 0) > 0 && (
           <Select value={sid ?? ""} onChange={(e) => setSeasonId(Number(e.target.value))} aria-label="Saison wählen" className="w-44">
             {(seasons.data ?? []).map((s) => (
@@ -109,7 +109,7 @@ function AdminInner() {
           { value: "setup", label: "Bracket-Setup" },
           { value: "matches", label: "Spiele" },
           { value: "requests", label: "Anträge", badge: summary.data?.pending_change_requests },
-          { value: "agent", label: "OpenClaw", badge: summary.data?.review_required },
+          { value: "agent", label: "ChatGPT", badge: summary.data?.review_required },
           { value: "audit", label: "Audit-Log" },
         ]}
         value={tab}

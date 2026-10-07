@@ -1,12 +1,12 @@
 /**
  * Final acceptance test (section 39 of the requirements) – a complete season on a fresh install:
- * admin creates season, teams & pairings → users log in and tip → tips lock → OpenClaw reports
- * results → points, leaderboard, NFL Bot, next round → bracket comparison → Super Bowl →
- * overall winner → Hall of Fame.
+ * admin creates season, teams & pairings → users log in and tip → tips lock → ChatGPT finds the
+ * results (OpenAI replaced by scripts/openai_mock.py) → points, leaderboard, NFL Bot, next round →
+ * bracket comparison → Super Bowl → overall winner → Hall of Fame.
  */
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 
-import { ADMIN, FIELD, apiLogin, call, isoOffset, loginUI } from "./helpers";
+import { ADMIN, FIELD, apiLogin, call, isoOffset, loginUI, mockResults, tokenState } from "./helpers";
 
 const SEASON = { name: "2030/2031", year: 2030 };
 const USERS = {
@@ -40,7 +40,6 @@ interface Ctx {
   adminToken: string;
   annaToken: string;
   benToken: string;
-  agentToken: string;
   seasonId: number;
   teams: Record<string, number>;
 }
@@ -51,11 +50,28 @@ async function adminMatches(request: APIRequestContext) {
   return Object.fromEntries(body.map((m) => [m.slot, m]));
 }
 
-async function asUser(browser: Browser, username: string, password: string): Promise<Page> {
-  const context = await browser.newContext({ locale: "de-DE", timezoneId: "Europe/Berlin", viewport: { width: 1600, height: 1000 } });
-  const page = await context.newPage();
-  await loginUI(page, username, password);
-  return page;
+/** A browser page that is already logged in with the given token. */
+async function asUser(browser: Browser, token: string): Promise<Page> {
+  const context = await browser.newContext({
+    locale: "de-DE",
+    timezoneId: "Europe/Berlin",
+    viewport: { width: 1600, height: 1000 },
+    storageState: tokenState(token),
+  });
+  return context.newPage();
+}
+
+/** Admin clicks "Jetzt prüfen" (via API) and waits until ChatGPT has evaluated the given games. */
+async function chatgptEvaluates(request: APIRequestContext, results: Record<string, [number, number]>) {
+  const matches = await adminMatches(request);
+  await mockResults(request, Object.fromEntries(Object.entries(results).map(([slot, score]) => [matches[slot].home_team.abbreviation, score])));
+  await call(request, ctx.adminToken, "POST", "/api/admin/agent/check", { match_ids: Object.keys(results).map((s) => matches[s].id) }, 200);
+  await expect
+    .poll(async () => {
+      const now = await adminMatches(request);
+      return Object.keys(results).filter((slot) => now[slot].status === "FINAL").length;
+    }, { timeout: 60_000 })
+    .toBe(Object.keys(results).length);
 }
 
 test.describe.serial("Abnahme: komplette Saison", () => {
@@ -79,8 +95,8 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     }
   });
 
-  test("2. Admin erstellt die Saison", async ({ page, request }) => {
-    await loginUI(page, ADMIN.username, ADMIN.password);
+  test("2. Admin erstellt die Saison", async ({ browser, request }) => {
+    const page = await asUser(browser, ctx.adminToken);
     await page.goto("/admin?tab=seasons");
     await page.getByLabel("Name (z. B. 2026/2027)").fill(SEASON.name);
     await page.getByLabel("Startjahr").fill(String(SEASON.year));
@@ -90,8 +106,8 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     ctx.seasonId = body.find((s) => s.name === SEASON.name).id;
   });
 
-  test("3. Admin setzt die Teams per Drag & Drop und erzeugt die Paarungen", async ({ page, request }) => {
-    await loginUI(page, ADMIN.username, ADMIN.password);
+  test("3. Admin setzt die Teams per Drag & Drop und erzeugt die Paarungen", async ({ browser, request }) => {
+    const page = await asUser(browser, ctx.adminToken);
     await page.goto("/admin?tab=setup");
     // real drag & drop of the #1 seed (filter the team list first, like a user would)
     await page.getByLabel("Team suchen").fill("Chiefs");
@@ -122,8 +138,8 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     await expect(page.getByTestId(`match:${(await adminMatches(request))["AFC-WC-1"].id}:home`)).toContainText("Bills");
   });
 
-  test("4. Admin aktiviert die Saison und setzt die Kickoff-Zeiten", async ({ page, request }) => {
-    await loginUI(page, ADMIN.username, ADMIN.password);
+  test("4. Admin aktiviert die Saison und setzt die Kickoff-Zeiten", async ({ browser, request }) => {
+    const page = await asUser(browser, ctx.adminToken);
     await page.goto("/admin?tab=seasons");
     await page.getByRole("button", { name: "Aktivieren" }).click();
     await expect(page.getByText("Saison aktiviert")).toBeVisible();
@@ -133,9 +149,11 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     }
   });
 
-  test("5. Benutzer meldet sich an und baut sein Bracket per Klick", async ({ browser, request }) => {
-    const page = await asUser(browser, USERS.anna.username, USERS.anna.password);
-    ctx.annaToken = await apiLogin(request, USERS.anna.username, USERS.anna.password);
+  test("5. Benutzer meldet sich an und baut sein Bracket per Klick", async ({ browser }) => {
+    const context = await browser.newContext({ locale: "de-DE", timezoneId: "Europe/Berlin", viewport: { width: 1600, height: 1000 } });
+    const page = await context.newPage();
+    await loginUI(page, USERS.anna.username, USERS.anna.password);
+    ctx.annaToken = (await page.evaluate(() => window.localStorage.getItem("nbb.token")))!;
     await page.goto("/bracket");
     for (const [slot, abbr] of ANNA_PICKS) {
       const button = page.getByTestId(`pick-${slot}-${abbr}`);
@@ -160,10 +178,10 @@ test.describe.serial("Abnahme: komplette Saison", () => {
       await call(request, ctx.benToken, "PUT", `/api/seasons/${ctx.seasonId}/bracket/me/picks/${slot}`, { winner_team_id: ctx.teams[abbr] }, 200);
     }
     // realtime chat: Anna sees Ben's message without reloading
-    const anna = await asUser(browser, USERS.anna.username, USERS.anna.password);
+    const anna = await asUser(browser, ctx.annaToken);
     await anna.goto("/chat");
     await expect(anna.getByText("Live verbunden")).toBeVisible();
-    const ben = await asUser(browser, USERS.ben.username, USERS.ben.password);
+    const ben = await asUser(browser, ctx.benToken);
     await ben.goto("/chat");
     await ben.getByTestId("chat-input").fill("Packers machen das Ding! 🧀");
     await ben.getByTestId("chat-send").click();
@@ -173,7 +191,7 @@ test.describe.serial("Abnahme: komplette Saison", () => {
   });
 
   test("7. Fremde Tipps sind vor dem Lock verdeckt", async ({ browser }) => {
-    const page = await asUser(browser, USERS.anna.username, USERS.anna.password);
+    const page = await asUser(browser, ctx.annaToken);
     await page.goto("/brackets");
     await page.getByRole("link", { name: /Ben/ }).click();
     await expect(page.getByText(/Tipps sind noch verdeckt/)).toBeVisible();
@@ -193,51 +211,44 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     expect(body.slots.find((s: any) => s.slot === "AFC-WC-1").pick.winner_team_id).toBe(ctx.teams.PIT);
   });
 
-  test("9. Admin erzeugt den OpenClaw-Token", async ({ page }) => {
-    await loginUI(page, ADMIN.username, ADMIN.password);
+  test("9. Admin prüft die ChatGPT-Verbindung", async ({ browser }) => {
+    const page = await asUser(browser, ctx.adminToken);
     await page.goto("/admin?tab=agent");
-    await page.getByRole("button", { name: "Token erstellen" }).click();
-    const token = (await page.getByTestId("agent-token").textContent())!.trim();
-    expect(token).toMatch(/^nbb_/);
-    ctx.agentToken = token;
+    await expect(page.getByTestId("agent-config")).toContainText("aktiv");
+    await page.getByRole("button", { name: "Verbindung testen" }).click();
+    await expect(page.getByText("ChatGPT erreichbar")).toBeVisible();
+    await page.context().close();
   });
 
-  async function report(request: APIRequestContext, match: any, home: number, away: number, extra: object = {}) {
-    return call<any>(request, ctx.agentToken, "POST", "/api/agent/results", {
-      match_id: match.id,
-      home_team: match.home_team.abbreviation,
-      away_team: match.away_team.abbreviation,
-      home_score: home,
-      away_score: away,
-      winner: home > away ? match.home_team.abbreviation : match.away_team.abbreviation,
-      source: "ESPN",
-      source_url: `https://www.espn.com/nfl/game/_/gameId/${match.id}`,
-      timestamp: new Date().toISOString(),
-      ...extra,
-    });
-  }
-
-  test("10. OpenClaw meldet Ergebnisse, das Backend validiert", async ({ request }) => {
+  test("10. ChatGPT findet die Ergebnisse, das Backend validiert und wertet", async ({ browser, request }) => {
     const matches = await adminMatches(request);
-    // agent token cannot use user endpoints, plausibility is checked
-    expect((await call(request, ctx.agentToken, "GET", "/api/me")).status).toBe(403);
-    const wrongTeams = await report(request, matches["AFC-WC-1"], 27, 17, { home_team: "NE" });
-    expect(wrongTeams.status).toBe(422);
-    const tie = await report(request, matches["AFC-WC-1"], 20, 20);
-    expect(tie.status).toBe(422);
-    const pending = await call<any[]>(request, ctx.agentToken, "GET", "/api/agent/matches/pending", undefined, 200);
-    expect(pending.body.map((m) => m.slot)).toEqual(expect.arrayContaining(Object.keys(RESULTS[0])));
+    const homeOf = (slot: string) => matches[slot].home_team.abbreviation;
+    await mockResults(request, Object.fromEntries(Object.entries(RESULTS[0]).map(([slot, score]) => [homeOf(slot), score])));
+    // the admin starts the check in the UI; the backend job asks "ChatGPT" within seconds
+    const page = await asUser(browser, ctx.adminToken);
+    await page.goto("/admin?tab=agent");
+    await page.getByRole("button", { name: "Jetzt prüfen" }).click();
+    await expect(page.getByText("Prüfung angestoßen")).toBeVisible();
+    await expect
+      .poll(async () => Object.values(await adminMatches(request)).filter((m: any) => m.status === "FINAL").length, { timeout: 60_000 })
+      .toBe(Object.keys(RESULTS[0]).length);
+    const after = await adminMatches(request);
     for (const [slot, [h, a]] of Object.entries(RESULTS[0])) {
-      const r = await report(request, matches[slot], h, a);
-      expect(r.status, JSON.stringify(r.body)).toBe(200);
-      expect(r.body.status).toBe("APPLIED");
+      expect([after[slot].home_score, after[slot].away_score, after[slot].result_source]).toEqual([h, a, "AGENT"]);
     }
-    const dup = await report(request, matches["AFC-WC-1"], 27, 17);
-    expect(dup.body.status).toBe("DUPLICATE");
+    // provenance is visible for the admin: sources from two different sites
+    const { body } = await call<any>(request, ctx.adminToken, "GET", "/api/admin/agent/overview", undefined, 200);
+    const applied = body.reports.filter((r: any) => r.status === "APPLIED");
+    expect(applied).toHaveLength(Object.keys(RESULTS[0]).length);
+    expect(applied[0].source).toBe("ESPN");
+    expect(applied[0].extra_sources[0].source).toBe("NFL.com");
+    await page.reload();
+    await expect(page.getByText("APPLIED").first()).toBeVisible();
+    await page.context().close();
   });
 
   test("11. Punkte, Rangliste, NFL Bot und nächste Runde", async ({ browser }) => {
-    const page = await asUser(browser, USERS.anna.username, USERS.anna.password);
+    const page = await asUser(browser, ctx.annaToken);
     await page.goto("/rangliste");
     const annaRow = page.getByRole("row", { name: /Anna/ });
     await expect(annaRow.locator("td").nth(2)).toHaveText("6"); // 3 (exact 27:17) + 3 correct winners
@@ -252,7 +263,7 @@ test.describe.serial("Abnahme: komplette Saison", () => {
   });
 
   test("12. Bracket-Vergleich mit einem Freund", async ({ browser }) => {
-    const page = await asUser(browser, USERS.anna.username, USERS.anna.password);
+    const page = await asUser(browser, ctx.annaToken);
     await page.goto("/brackets");
     await page.getByLabel("Spieler B").selectOption({ label: "Ben" });
     await page.getByRole("button", { name: "Vergleichen" }).click();
@@ -276,12 +287,11 @@ test.describe.serial("Abnahme: komplette Saison", () => {
       if (round === 3) {
         await call(request, ctx.benToken, "PUT", `/api/seasons/${ctx.seasonId}/bracket/me/picks/SB`, { winner_team_id: ctx.teams.GB }, 200);
       }
-      for (const [slot, [h, a]] of Object.entries(RESULTS[round])) {
+      for (const slot of Object.keys(RESULTS[round])) {
         expect(matches[slot].home_team, `${slot} pairing created automatically`).not.toBeNull();
         await call(request, ctx.adminToken, "PATCH", `/api/admin/matches/${matches[slot].id}`, { kickoff_at: isoOffset(-180) }, 200);
-        const r = await report(request, matches[slot], h, a);
-        expect(r.body.status, JSON.stringify(r.body)).toBe("APPLIED");
       }
+      await chatgptEvaluates(request, RESULTS[round]);
     }
     const { body } = await call<any[]>(request, ctx.annaToken, "GET", `/api/seasons/${ctx.seasonId}/leaderboard`, undefined, 200);
     const points = Object.fromEntries(body.map((r) => [r.user.display_name, r.points]));
@@ -289,7 +299,7 @@ test.describe.serial("Abnahme: komplette Saison", () => {
   });
 
   test("14. Gesamtsieger wird angezeigt und die Hall of Fame aktualisiert", async ({ browser }) => {
-    const page = await asUser(browser, USERS.anna.username, USERS.anna.password);
+    const page = await asUser(browser, ctx.annaToken);
     await page.goto("/chat");
     await expect(page.getByTestId("bot-CHAMPION")).toContainText("Anna");
     await page.goto("/hall-of-fame");

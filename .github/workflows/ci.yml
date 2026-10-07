@@ -1,10 +1,36 @@
 name: CI
 
+# every push (all branches) – the results also show up on pull requests for the same commit, so a
+# separate pull_request trigger would only run everything twice
 on:
   push:
-  pull_request:
+  workflow_dispatch:
+
+# the workflow only reads the repository
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  secrets:
+    # fails if anything that looks like a real key or private key is in the repository or its history
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        run: |
+          pattern='sk-(proj-|svcacct-|admin-)?[A-Za-z0-9_-]{40,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}'
+          if git log --all -p --no-color | grep -nE "$pattern"; then
+            echo "::error::Mögliches Secret im Repository gefunden – Key sofort widerrufen und aus der Historie entfernen."
+            exit 1
+          fi
+          echo "keine Secrets gefunden"
+
   backend:
     runs-on: ubuntu-latest
     services:

@@ -3,8 +3,8 @@
 * Users log in with username + password (managed inside the app). Passwords are stored as
   salted PBKDF2-SHA256 hashes. After login the client receives a signed access token (JWT, HS256)
   which it sends as ``Authorization: Bearer …``.
-* The OpenClaw agent authenticates with an app-issued API token (``nbb_…``) that only grants the
-  role AGENT. Agent principals can never use user/admin endpoints and vice versa.
+* There is no external machine access: results are researched by the built-in ChatGPT result agent
+  (app.services.result_agent), which runs inside the backend and never authenticates over HTTP.
 """
 
 from __future__ import annotations
@@ -22,17 +22,15 @@ from typing import Annotated, Literal
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings, is_placeholder
 from app.core.db import get_session
-from app.models import AgentToken, User
+from app.models import User
 from app.models.enums import Role
 
 log = logging.getLogger(__name__)
 
-AGENT_TOKEN_PREFIX = "nbb_"
 JWT_ALGORITHM = "HS256"
 LAST_SEEN_THROTTLE = timedelta(minutes=5)
 _PBKDF2 = "pbkdf2_sha256"
@@ -46,11 +44,13 @@ class AuthError(HTTPException):
 
 @dataclass
 class Principal:
+    """Who performs an action. ``kind="agent"`` is only ever created internally for the ChatGPT
+    result agent; HTTP requests always resolve to ``kind="user"``."""
+
     kind: Literal["user", "agent"]
     label: str
     roles: frozenset[str] = field(default_factory=frozenset)
     user: User | None = None
-    agent_token_id: int | None = None
     ip: str | None = None
 
     @property
@@ -158,16 +158,6 @@ def decode_access_token(token: str) -> dict:
     return claims
 
 
-def hash_agent_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def generate_agent_token() -> tuple[str, str, str]:
-    """Return (token, prefix, sha256) for a new agent API token."""
-    token = AGENT_TOKEN_PREFIX + secrets.token_urlsafe(32)
-    return token, token[:12], hash_agent_token(token)
-
-
 def client_ip(request: Request) -> str | None:
     forwarded = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     if forwarded:
@@ -177,21 +167,6 @@ def client_ip(request: Request) -> str | None:
 
 async def authenticate(token: str, session: AsyncSession, ip: str | None = None) -> Principal:
     now = datetime.now(UTC)
-    if token.startswith(AGENT_TOKEN_PREFIX):
-        record = (
-            await session.execute(
-                select(AgentToken).where(
-                    AgentToken.token_hash == hash_agent_token(token), AgentToken.revoked_at.is_(None)
-                )
-            )
-        ).scalar_one_or_none()
-        if record is None:
-            raise AuthError("Ungültiger Agent-Token")
-        if record.last_used_at is None or now - record.last_used_at > timedelta(minutes=1):
-            record.last_used_at = now
-            await session.commit()
-        return Principal("agent", f"token:{record.name}", frozenset({Role.AGENT.value}), None, record.id, ip)
-
     claims = decode_access_token(token)
     try:
         user = await session.get(User, uuid.UUID(str(claims["sub"])))
@@ -205,7 +180,7 @@ async def authenticate(token: str, session: AsyncSession, ip: str | None = None)
         user.last_seen_at = now
         await session.commit()
     roles = frozenset({Role.USER.value, Role.ADMIN.value} if user.role == Role.ADMIN else {Role.USER.value})
-    return Principal("user", user.display_name, roles, user, None, ip)
+    return Principal("user", user.display_name, roles, user, ip)
 
 
 def _bearer(request: Request) -> str:
@@ -224,7 +199,7 @@ async def get_principal(request: Request, session: Annotated[AsyncSession, Depen
 
 async def require_user(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
     if principal.kind != "user":
-        raise AuthError("Agent-Zugänge dürfen keine Benutzerfunktionen verwenden", status.HTTP_403_FORBIDDEN)
+        raise AuthError("Kein Benutzerzugang", status.HTTP_403_FORBIDDEN)
     return principal
 
 
@@ -234,13 +209,6 @@ async def require_admin(principal: Annotated[Principal, Depends(require_user)]) 
     return principal
 
 
-async def require_agent(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
-    if principal.kind != "agent":
-        raise AuthError("Nur für den Agent-Zugang (Rolle AGENT)", status.HTTP_403_FORBIDDEN)
-    return principal
-
-
 CurrentUser = Annotated[Principal, Depends(require_user)]
 CurrentAdmin = Annotated[Principal, Depends(require_admin)]
-CurrentAgent = Annotated[Principal, Depends(require_agent)]
 DBSession = Annotated[AsyncSession, Depends(get_session)]

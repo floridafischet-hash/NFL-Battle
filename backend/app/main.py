@@ -6,10 +6,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, agent, auth, game, public, social
+from app.api import admin, auth, game, public, social
 from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.realtime.hub import listen_forever
+from app.services.result_agent import result_agent_loop
 from app.services.scheduler import scheduler_loop
 
 
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(listen_forever(stop))]
     if settings.scheduler_enabled:
         tasks.append(asyncio.create_task(scheduler_loop(stop)))
+        tasks.append(asyncio.create_task(result_agent_loop(stop)))
     try:
         yield
     finally:
@@ -49,9 +51,10 @@ def create_app() -> FastAPI:
         title="NFL Bracket Battle API",
         version="1.0.0",
         lifespan=lifespan,
-        docs_url="/api/docs",
+        # interactive API docs only outside production (smaller attack surface)
+        docs_url=None if settings.app_env == "production" else "/api/docs",
         redoc_url=None,
-        openapi_url="/api/openapi.json",
+        openapi_url=None if settings.app_env == "production" else "/api/openapi.json",
     )
 
     @app.middleware("http")
@@ -66,7 +69,7 @@ def create_app() -> FastAPI:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 
-    for module in (public, auth, game, social, admin, agent):
+    for module in (public, auth, game, social, admin):
         app.include_router(module.router)
     app.include_router(social.ws_router)
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)

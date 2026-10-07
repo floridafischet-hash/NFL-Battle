@@ -4,7 +4,6 @@ from enum import StrEnum
 class Role(StrEnum):
     USER = "USER"
     ADMIN = "ADMIN"
-    AGENT = "AGENT"
 
 
 class Conference(StrEnum):
@@ -59,6 +58,7 @@ class AgentRunStatus(StrEnum):
     REJECTED = "REJECTED"
     ERROR = "ERROR"
     OK = "OK"
+    NO_RESULT = "NO_RESULT"
 
 
 class ReportStatus(StrEnum):
