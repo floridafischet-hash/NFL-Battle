@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { AgentAdmin } from "@/components/admin/AgentAdmin";
+import { GreetingAdmin } from "@/components/admin/GreetingAdmin";
 import { AuditAdmin } from "@/components/admin/AuditAdmin";
 import { BracketSetup } from "@/components/admin/BracketSetup";
 import { useAdminSeasons } from "@/components/admin/common";
@@ -54,6 +55,7 @@ function Overview({ summary, go }: { summary: Summary | undefined; go: (t: Tab) 
           <p className="text-sm text-slate-400">Noch kein ChatGPT-Lauf.</p>
         )}
       </Card>
+      <GreetingAdmin />
       <Card title="Ablauf einer Saison">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-300">
           <li>Saisons: Saison erstellen und Punktesystem festlegen.</li>

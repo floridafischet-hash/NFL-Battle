@@ -33,7 +33,8 @@ Hall of Fame. 🏆
 - **Offizielle Teamlogos** (werden direkt geladen, nicht im Repo gespeichert).
 - **Adminbereich**: Benutzer, Saisons, Teams, Drag & Drop fürs Bracket-Setup, Ergebnisse,
   Änderungsanträge, ChatGPT-Status und ein Audit-Log, das sich nicht manipulieren lässt.
-- Läuft auf dem Handy genauso wie am großen Bildschirm.
+- **Als App aufs Handy**: Auf Android erscheint „App installieren“ direkt auf dem Dashboard, auf dem iPhone geht's über Teilen → „Zum Home-Bildschirm“. Dann startet das Tippspiel im Vollbild mit eigenem Icon.
+- **Begrüßung mit König 👑**: Oben auf dem Dashboard wirst du begrüßt, und daneben thront der Vorjahressieger. Name und Titel stellt der Admin unter **Admin → Übersicht → Begrüßung & König** ein.
 
 ---
 

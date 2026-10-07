@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 
 import { BracketBoard } from "@/components/bracket/BracketBoard";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { Greeting } from "@/components/dashboard/Greeting";
 import { LeaderboardCompact, NextGameCard, RecentResults, UserStatsCard } from "@/components/dashboard/Widgets";
 import { Button, Card, EmptyState, Loading, Tabs } from "@/components/ui";
 import { slotsFromMatches, withOrigins } from "@/lib/bracket";
@@ -32,11 +33,14 @@ export default function DashboardPage() {
   if (dashboard.isLoading) return <Loading label="Dashboard lädt …" />;
   if (!season) {
     return (
-      <Card>
-        <EmptyState title="Noch keine Saison">
-          Ein Admin muss zuerst eine Saison mit Teams und Paarungen anlegen. Danach erscheint hier der Playoff-Bracket.
-        </EmptyState>
-      </Card>
+      <div className="space-y-5">
+        <Greeting />
+        <Card>
+          <EmptyState title="Noch keine Saison">
+            Ein Admin muss zuerst eine Saison mit Teams und Paarungen anlegen. Danach erscheint hier der Playoff-Bracket.
+          </EmptyState>
+        </Card>
+      </div>
     );
   }
   const d = dashboard.data!;
@@ -46,6 +50,7 @@ export default function DashboardPage() {
   return (
     <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-5">
+        <Greeting />
         {/* Hero / bracket */}
         <section className="glass relative overflow-hidden rounded-3xl">
           <div className="pointer-events-none absolute -top-24 left-0 h-48 w-1/2 bg-gradient-to-r from-afc/25 to-transparent blur-3xl" />

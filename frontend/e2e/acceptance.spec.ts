@@ -313,4 +313,19 @@ test.describe.serial("Abnahme: komplette Saison", () => {
     await expect(page.getByTestId("champion")).toContainText("Chiefs");
     await page.context().close();
   });
+
+  test("15. Begrüßung mit König und installierbare App", async ({ browser, request }) => {
+    await call(request, ctx.adminToken, "PUT", "/api/admin/greeting", { king_name: "Anna", king_title: "König 2030" }, 200);
+    const page = await asUser(browser, ctx.benToken);
+    await page.goto("/");
+    await expect(page.getByTestId("greeting")).toContainText("Ben");
+    await expect(page.getByTestId("king")).toContainText("König 2030");
+    await expect(page.getByTestId("king")).toContainText("Anna");
+    const manifest = await request.get("/manifest.webmanifest");
+    expect(manifest.status()).toBe(200);
+    expect((await manifest.json()).display).toBe("standalone");
+    expect((await request.get("/sw.js")).status()).toBe(200);
+    expect((await request.get("/icons/icon-512.png")).status()).toBe(200);
+    await page.context().close();
+  });
 });

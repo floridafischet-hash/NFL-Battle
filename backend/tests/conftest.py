@@ -61,7 +61,7 @@ def migrated_db():
 
 
 TABLES = (
-    "audit_logs, result_reports, agent_runs, notifications, chat_messages, system_messages, uploads, "
+    "audit_logs, app_settings, result_reports, agent_runs, notifications, chat_messages, system_messages, uploads, "
     "hall_of_fame, leaderboards, scores, prediction_changes, predictions, brackets, matches, season_teams, seasons, "
     "teams, users"
 )

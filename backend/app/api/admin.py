@@ -32,7 +32,7 @@ from app.realtime.events import publish
 from app.schemas.common import MatchOut, SeasonOut, TeamOut
 from app.schemas.serializers import change_request_out
 from app.services import agent as agent_service
-from app.services import change_requests, match_admin, result_agent
+from app.services import app_settings, change_requests, match_admin, result_agent
 from app.services.audit import audit
 from app.services.brackets import load_context
 from app.services.results import apply_result, reset_result
@@ -613,6 +613,37 @@ async def accept_report(report_id: int, admin: CurrentAdmin, session: DBSession)
 async def reject_report(report_id: int, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
     report = await agent_service.reject_report(session, admin, report_id)
     return report_out(report)
+
+
+# ------------------------------------------------------------------ greeting
+
+
+class GreetingIn(BaseModel):
+    king_name: str | None = Field(default=None, max_length=80)
+    king_title: str | None = Field(default=None, max_length=40)
+
+    @field_validator("king_name", "king_title")
+    @classmethod
+    def _clean(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        return clean_display_name(v) if v else None
+
+
+@router.get("/greeting")
+async def get_greeting(admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+    return await app_settings.greeting(session)
+
+
+@router.put("/greeting")
+async def put_greeting(body: GreetingIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+    old = await app_settings.greeting(session)
+    await app_settings.set_value(session, app_settings.KING_NAME, body.king_name)
+    await app_settings.set_value(session, app_settings.KING_TITLE, body.king_title)
+    await session.flush()
+    new = await app_settings.greeting(session)
+    audit(session, admin, "GREETING_UPDATED", "app_settings", "greeting", old, new, source="ADMIN")
+    await session.commit()
+    return new
 
 
 # ------------------------------------------------------------------ audit
