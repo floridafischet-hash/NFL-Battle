@@ -19,11 +19,17 @@ from app.core.security import AuthError, CurrentUser, DBSession, authenticate, d
 from app.models import Notification, User
 from app.models.enums import UploadKind
 from app.realtime.hub import Connection, hub
-from app.services import chat, stats
+from app.services import app_settings, chat, stats
 from app.services.seasons import get_current_season, now_utc, resolve_season
 from app.services.uploads import store_image
 
 router = APIRouter(prefix="/api", tags=["social"])
+
+
+@router.get("/greeting")
+async def greeting(principal: CurrentUser, session: DBSession) -> dict[str, Any]:
+    """Dashboard greeting: the reigning champion ("König") set by an admin."""
+    return await app_settings.greeting(session)
 
 
 class ChatIn(BaseModel):

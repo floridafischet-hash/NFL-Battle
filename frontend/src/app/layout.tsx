@@ -12,7 +12,8 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: { default: "NFL Bracket Battle", template: "%s · NFL Bracket Battle" },
   description: "Das private NFL-Playoff-Tippspiel",
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.svg", apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "Bracket Battle", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

@@ -41,6 +41,7 @@ class MeOut(BaseModel):
     avatar_url: str | None
     role: str
     is_admin: bool
+    is_superuser: bool = False
 
 
 class LoginOut(BaseModel):
@@ -72,6 +73,7 @@ def me_out(user: User) -> MeOut:
         avatar_url=user.avatar_url,
         role=user.role.value,
         is_admin=user.is_admin,
+        is_superuser=user.is_superuser,
     )
 
 

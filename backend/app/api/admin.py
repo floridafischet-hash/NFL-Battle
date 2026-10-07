@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
-from app.core.security import CurrentAdmin, DBSession, hash_password
+from app.core.security import CurrentAdmin, CurrentSuperuser, DBSession, hash_password
 from app.core.text import clean_display_name
 from app.models import (
     AgentRun,
@@ -32,7 +32,7 @@ from app.realtime.events import publish
 from app.schemas.common import MatchOut, SeasonOut, TeamOut
 from app.schemas.serializers import change_request_out
 from app.services import agent as agent_service
-from app.services import change_requests, match_admin, result_agent
+from app.services import app_settings, change_requests, match_admin, result_agent
 from app.services.audit import audit
 from app.services.brackets import load_context
 from app.services.results import apply_result, reset_result
@@ -92,6 +92,7 @@ def user_admin_out(u: User) -> dict[str, Any]:
         "avatar_url": u.avatar_url,
         "role": u.role.value,
         "is_active": u.is_active,
+        "is_superuser": u.is_superuser,
         "created_at": u.created_at,
         "last_login_at": u.last_login_at,
         "last_seen_at": u.last_seen_at,
@@ -112,7 +113,7 @@ async def list_users(admin: CurrentAdmin, session: DBSession) -> list[dict[str, 
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
-async def create_user(body: UserCreateIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+async def create_user(body: UserCreateIn, admin: CurrentSuperuser, session: DBSession) -> dict[str, Any]:
     user = User(
         username=body.username,
         display_name=body.display_name.strip(),
@@ -141,13 +142,13 @@ async def create_user(body: UserCreateIn, admin: CurrentAdmin, session: DBSessio
 
 @router.patch("/users/{user_id}")
 async def update_user(
-    user_id: uuid.UUID, body: UserUpdateIn, admin: CurrentAdmin, session: DBSession
+    user_id: uuid.UUID, body: UserUpdateIn, admin: CurrentSuperuser, session: DBSession
 ) -> dict[str, Any]:
     user = await _user(session, user_id)
     old = {"display_name": user.display_name, "role": user.role.value, "is_active": user.is_active}
-    if user.id == admin.user_id and (body.role == "USER" or body.is_active is False):
+    if user.is_superuser and (body.role == "USER" or body.is_active is False):
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Du kannst dir selbst nicht die Adminrechte entziehen oder dich sperren."
+            status.HTTP_409_CONFLICT, "Der Inhaber der Instanz kann nicht gesperrt oder herabgestuft werden."
         )
     if body.display_name is not None:
         user.display_name = body.display_name.strip()
@@ -168,7 +169,9 @@ async def update_user(
 
 
 @router.post("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
-async def reset_password(user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentAdmin, session: DBSession) -> None:
+async def reset_password(
+    user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentSuperuser, session: DBSession
+) -> None:
     user = await _user(session, user_id)
     user.password_hash = await asyncio.to_thread(hash_password, body.password)
     user.token_version += 1
@@ -613,6 +616,37 @@ async def accept_report(report_id: int, admin: CurrentAdmin, session: DBSession)
 async def reject_report(report_id: int, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
     report = await agent_service.reject_report(session, admin, report_id)
     return report_out(report)
+
+
+# ------------------------------------------------------------------ greeting
+
+
+class GreetingIn(BaseModel):
+    king_name: str | None = Field(default=None, max_length=80)
+    king_title: str | None = Field(default=None, max_length=40)
+
+    @field_validator("king_name", "king_title")
+    @classmethod
+    def _clean(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        return clean_display_name(v) if v else None
+
+
+@router.get("/greeting")
+async def get_greeting(admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+    return await app_settings.greeting(session)
+
+
+@router.put("/greeting")
+async def put_greeting(body: GreetingIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+    old = await app_settings.greeting(session)
+    await app_settings.set_value(session, app_settings.KING_NAME, body.king_name)
+    await app_settings.set_value(session, app_settings.KING_TITLE, body.king_title)
+    await session.flush()
+    new = await app_settings.greeting(session)
+    audit(session, admin, "GREETING_UPDATED", "app_settings", "greeting", old, new, source="ADMIN")
+    await session.commit()
+    return new
 
 
 # ------------------------------------------------------------------ audit

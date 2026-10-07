@@ -61,7 +61,7 @@ def migrated_db():
 
 
 TABLES = (
-    "audit_logs, result_reports, agent_runs, notifications, chat_messages, system_messages, uploads, "
+    "audit_logs, app_settings, result_reports, agent_runs, notifications, chat_messages, system_messages, uploads, "
     "hall_of_fame, leaderboards, scores, prediction_changes, predictions, brackets, matches, season_teams, seasons, "
     "teams, users"
 )
@@ -78,7 +78,9 @@ async def clean_db():
     yield
 
 
-async def create_user(username: str, role: Role = Role.USER, password: str = PASSWORD, active: bool = True) -> User:
+async def create_user(
+    username: str, role: Role = Role.USER, password: str = PASSWORD, active: bool = True, superuser: bool = False
+) -> User:
     async with get_sessionmaker()() as session:
         user = User(
             username=username,
@@ -86,6 +88,7 @@ async def create_user(username: str, role: Role = Role.USER, password: str = PAS
             role=role,
             password_hash=hash_password(password),
             is_active=active,
+            is_superuser=superuser,
         )
         session.add(user)
         await session.commit()
@@ -131,7 +134,7 @@ async def login(username: str, password: str = PASSWORD) -> Api:
 
 @pytest.fixture
 async def admin() -> Api:
-    await create_user("admin", Role.ADMIN)
+    await create_user("admin", Role.ADMIN, superuser=True)
     return await login("admin")
 
 

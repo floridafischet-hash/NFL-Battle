@@ -37,7 +37,7 @@ ihn vor, damit der Nutzer nur „passt“ sagen muss.
 | 4 | **ChatGPT-Abo:** Hast du **ChatGPT Plus oder Pro**? Soll die App damit die Ergebnisse suchen? (Kein API-Key nötig, du meldest dich einmal per Code im Browser an.) | Ergebnis-Agent über Abo | ja, über das Abo |
 | 5 | Falls **kein Abo**: Lieber einen **OpenAI-API-Key** nutzen (kostet pro Abfrage) oder die Ergebnisse **von Hand** eintragen? | Alternative | von Hand |
 | 6 | **Admin:** Welcher Benutzername (Standard `admin`) und welcher Anzeigename? Das Passwort würfle ich zufällig aus, außer du willst ein eigenes. | Erster Admin | `admin`, zufällig |
-| 7 | **Mitspieler:** Wer spielt mit (Namen)? Soll ich sie gleich anlegen? Oder erst mal mit **Demo-Daten** zum Ausprobieren starten? | Benutzer, `SEED_DEMO_DATA` | Demo-Daten an |
+| 7 | **Mitspieler:** Wer spielt mit (Namen)? Soll ich sie gleich anlegen? Oder erst mal mit **Demo-Daten** zum Ausprobieren starten? | Benutzer, `SEED_DEMO_DATA` | leer starten (Demo aus) |
 | 8 | **Zeitzone** der Gruppe? | Bot-Nachrichten, Deadlines | `Europe/Berlin` |
 | 9 | **Punktesystem**: Standard ist Sieger 1, exakter Endstand 3, Champion-Bonus 3, Tipp-Lock zum Kickoff. Passt das? | Saison-Einstellungen | passt |
 | 10 | **Backups**: Soll ich ein nächtliches Backup per cron einrichten? Wohin sollen die Kopien zusätzlich gehen (NAS, anderer Server)? | Datensicherheit | täglich 03:15 lokal |
@@ -83,7 +83,7 @@ Dann setzt du die Antworten aus Schritt 1 in der `.env` (nur die Zeilen ändern,
 |---|---|
 | Admin-Name | `ADMIN_USERNAME=…`, `ADMIN_DISPLAY_NAME=…` |
 | Zeitzone | `APP_TIMEZONE=…` |
-| Demo-Daten aus | `SEED_DEMO_DATA=false` |
+| Demo-Daten an | `SEED_DEMO_DATA=true` |
 | Port belegt | `HTTP_PORT=8090` |
 | eigener Reverse-Proxy | `HTTP_BIND=127.0.0.1` |
 | Domain + HTTPS | `DOMAIN=…`, `ACME_EMAIL=…`, `PUBLIC_URL=https://…` |
@@ -153,7 +153,7 @@ Was dabei schiefgehen kann:
 
 ## 5. Gruppe einrichten (nach Wunsch)
 
-- **Mitspieler anlegen**: Im Browser unter Admin → Benutzer → „Benutzer anlegen“. Per Kommandozeile
+- **Mitspieler anlegen**: Das darf nur der Inhaber (der Admin aus `ADMIN_USERNAME`). Im Browser unter Admin → Benutzer → „Benutzer anlegen“. Per Kommandozeile
   geht nur der Admin (`python -m app.cli create-admin …`). Für Spieler also die UI nutzen oder den
   Nutzer bitten, das selbst zu machen. Passwörter schickt der Nutzer seinen Freunden selbst.
 - **Demo-Daten wieder weg**, wenn es ernst wird: **Achtung, löscht alles** (vorher fragen!):
