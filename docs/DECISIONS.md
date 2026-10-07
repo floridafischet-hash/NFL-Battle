@@ -15,7 +15,7 @@
 | 11 | **ChatGPT im Backend statt externer Agent-API** (OpenAI Responses API mit Websuche; Domain-Allowlist, nur belegte Quellen, 2 Bestätigungen) | Ausdrücklicher Wunsch: Ergebnisse per ChatGPT, OpenClaw-Zugang entfernt. Kein eingehender Maschinen-Zugang mehr ⇒ kleinere Angriffsfläche. Die Antwort des Modells gilt als unsichere Eingabe: Schema, belegte Quellen, übereinstimmende Seiten; Unsicheres landet als REVIEW_REQUIRED beim Admin, gewertete Spiele werden nie automatisch überschrieben. Kostenbremse über Tageslimit. |
 | 12 | **Audit-Log append-only per DB-Trigger** | Auch ein Fehler im Code kann Protokolleinträge nicht verändern oder löschen. |
 | 13 | **Uploads neu kodiert (Pillow → WebP), kein SVG** | Entfernt Metadaten und verhindert Script-Injection über Bilddateien. |
-| 14 | **Team-Logos über `logo_url`** + generierte neutrale Wappen | Keine geschützten NFL-Logos im Repository; offizielle Logos lassen sich per Upload oder Datei-Austausch hinterlegen. |
+| 14 | **Offizielle Team-Logos per `logo_url` vom ESPN-Logo-CDN**, neutrale Wappen als Fallback | Ausdrücklicher Wunsch (privater Gebrauch). Die Logos werden nur verlinkt, nicht im Repository gespeichert; fällt das CDN aus, zeigt das Frontend das generierte Wappen. Jedes Logo ist im Admin austauschbar. |
 | 15 | **Next.js als Client-App mit React Query** | Daten kommen aus der API; gezielte Cache-Invalidierung per WebSocket statt Reloads; `output: standalone` für kleine Images. |
 | 16 | **Eine Domain mit Pfad-Routing (Nginx), TLS über Traefik** | Keine CORS-/Cookie-Probleme; Traefik übernimmt Let's Encrypt automatisch. |
 | 17 | **Migrationen als eigener One-Shot-Dienst** | Sauberer Start, Kubernetes-tauglich (Job/initContainer). |

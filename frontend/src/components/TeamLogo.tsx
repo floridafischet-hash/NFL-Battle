@@ -1,13 +1,14 @@
 "use client";
 
 import clsx from "clsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Team } from "@/lib/types";
 
 const FALLBACK = "/logos/TBD.svg";
 
-/** Team logo from the team's configurable logo_url (never hard-coded per component). */
+/** Team logo from the team's configurable logo_url (never hard-coded per component). If the image
+ * cannot be loaded (e.g. the logo CDN is unreachable) the neutral crest of the team is shown. */
 export function TeamLogo({
   team,
   size = 32,
@@ -19,8 +20,11 @@ export function TeamLogo({
   className?: string;
   glow?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
-  const src = !team ? FALLBACK : failed || !team.logo_url ? FALLBACK : team.logo_url;
+  const [failures, setFailures] = useState(0);
+  useEffect(() => setFailures(0), [team?.logo_url]);
+  const neutral = team ? `/logos/${team.abbreviation}.svg` : FALLBACK;
+  const candidates = team ? [team.logo_url, neutral, FALLBACK].filter((u): u is string => !!u) : [FALLBACK];
+  const src = candidates[Math.min(failures, candidates.length - 1)];
   return (
     <img
       src={src}
@@ -30,7 +34,8 @@ export function TeamLogo({
       loading="lazy"
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      referrerPolicy="no-referrer"
+      onError={() => setFailures((n) => (n < candidates.length - 1 ? n + 1 : n))}
       className={clsx("shrink-0 object-contain select-none", className)}
       style={{
         width: size,

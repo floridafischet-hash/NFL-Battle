@@ -65,7 +65,7 @@ Alle technischen Entscheidungen inkl. Begründung stehen zusätzlich kompakt in
 │   ├── src/app/             Seiten (Dashboard, Mein Bracket, Spiele, …, Admin)
 │   ├── src/components/      UI-Bausteine (Bracket, MatchCard, Chat, …)
 │   ├── src/lib/             API-Client, Auth (Login/Token), Realtime, Hooks
-│   ├── public/logos/        Standard-Teamlogos (austauschbar)
+│   ├── public/logos/        neutrale Ersatz-Wappen (offizielle Logos kommen per logo_url)
 │   └── e2e/                 Playwright UI- und Abnahmetests
 ├── nginx/                   Reverse-Proxy-Konfiguration
 ├── scripts/                 Backup, Restore, Secrets, Logos, Update

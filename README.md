@@ -237,8 +237,12 @@ gewertete Spiele werden nie automatisch überschrieben. Ohne Key trägst du Erge
 
 ## Teamlogos & Hintergrund austauschen
 
-- Jedes Team hat eine `logo_url`. Standardmäßig zeigen sie auf neutrale, generierte Wappen
-  (`frontend/public/logos/<KÜRZEL>.svg`) – **keine geschützten NFL-Logos** im Repository.
+- Jedes Team hat eine `logo_url`. Standardmäßig zeigen sie auf die **offiziellen Teamlogos** (ESPN-Logo-CDN,
+  Zuordnung aus der nflverse-Teamtabelle). Die Bilddateien liegen **nicht** im Repository, der Browser lädt
+  sie direkt. Gedacht für den privaten Gebrauch. Ist ein Logo nicht erreichbar, zeigt die App automatisch
+  ein neutrales Wappen in Teamfarben (`frontend/public/logos/<KÜRZEL>.svg`).
+- Bestehende Installationen bekommen die offiziellen Logos beim nächsten Start (`migrate`);
+  selbst hochgeladene oder eigene Logo-URLs bleiben unverändert.
 - Eigene Logos: **Admin → Teams → Team öffnen → Logo hochladen** (PNG/JPEG/WebP; landet im
   Datenvolume und ist im Backup enthalten) oder eine URL eintragen (`/…` oder `https://…`).
 - Alternativ Dateien in `frontend/public/logos/` ersetzen (gleicher Name) und das Frontend neu bauen.
@@ -341,7 +345,7 @@ Die Anwendung ist so gebaut, dass sie ohne Umbau auf Kubernetes läuft:
 
 ## Projektstatus
 
-Alle Phasen der Aufgabenliste sind umgesetzt und getestet (88 Backend-Tests, 5 Frontend-Unit-Tests,
+Alle Phasen der Aufgabenliste sind umgesetzt und getestet (90 Backend-Tests, 5 Frontend-Unit-Tests,
 15 End-to-End-Tests inkl. kompletter Saison). Umgesetzte Abweichungen und Grenzen:
 
 - **Keycloak wurde auf Wunsch durch eine eingebaute Benutzerverwaltung ersetzt** (siehe
@@ -349,5 +353,6 @@ Alle Phasen der Aufgabenliste sind umgesetzt und getestet (88 Backend-Tests, 5 F
 - **Der OpenClaw-Zugang wurde auf Wunsch entfernt**; Ergebnisse sucht jetzt der ChatGPT-Agent im
   Backend (OpenAI-API-Key nötig, sonst manuelle Eingabe) – siehe [CHATGPT.md](docs/CHATGPT.md).
 - Benachrichtigungen erscheinen in der App (Glocke, Chat, Toasts); E-Mail/Push ist nicht umgesetzt.
-- Mitgelieferte Teamlogos sind neutrale Wappen in Teamfarben; offizielle Logos können hochgeladen
+- Teamlogos: offizielle Logos werden vom ESPN-Logo-CDN geladen (nicht im Repository); neutrale Wappen
+  dienen als Fallback. Eigene Logos können jederzeit hochgeladen
   oder per Datei ausgetauscht werden.

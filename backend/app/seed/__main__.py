@@ -32,7 +32,7 @@ from app.models import (
     User,
 )
 from app.models.enums import MatchStatus, ResultSource, Role
-from app.seed.teams import NFL_TEAMS, default_logo_url
+from app.seed.teams import NFL_TEAMS, default_logo_url, neutral_logo_url
 from app.services import bot
 from app.services.bracket_engine import Pick, slots_in_resolution_order
 from app.services.brackets import load_context, picks_by_slot
@@ -88,6 +88,9 @@ async def ensure_teams(session) -> dict[str, Team]:
             )
             session.add(team)
             existing[abbr] = team
+        elif existing[abbr].logo_url in (None, "", neutral_logo_url(abbr)):
+            # older installs: neutral crest → official logo (uploaded or custom logos stay untouched)
+            existing[abbr].logo_url = default_logo_url(abbr)
     await session.flush()
     return existing
 

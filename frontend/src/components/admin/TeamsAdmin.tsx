@@ -74,7 +74,7 @@ function TeamModal({ team, onClose }: { team: Team | "new" | null; onClose: () =
         <div className="flex items-center gap-4 rounded-xl bg-white/[0.03] p-3">
           <TeamLogo team={{ ...form, logo_url: form.logo_url || null } as Team} size={72} glow />
           <div className="flex-1 space-y-2">
-            {field("logo_url", "Logo-URL (/logos/KC.svg oder https://…)")}
+            {field("logo_url", "Logo-URL (https://… oder /logos/KC.svg für das neutrale Wappen)")}
             {editing && (
               <Button type="button" size="sm" onClick={() => file.current?.click()} loading={logo.isPending}>
                 <Upload className="size-4" /> Logo hochladen (PNG/JPEG/WebP)
