@@ -80,6 +80,7 @@ ChatGPTs Antwort gilt als **nicht vertrauenswürdige Eingabe**. Sie wird so gepr
 | Plausibel: 0–99 Punkte, kein Unentschieden, Sieger passt, Spiel kann schon beendet sein | abgelehnt |
 | Alle Quellen nennen denselben Spielstand, keine widersprüchliche frühere Meldung | Admin-Prüfung |
 | Mindestens `AGENT_MIN_CONFIRMATIONS` (Standard 2) Quellen von **verschiedenen** Seiten | wartet auf Bestätigung |
+| **Zwei unabhängige ChatGPT-Suchen** (`RESULT_AGENT_CONFIRM_RUNS`, Standard 2) melden denselben Spielstand | wartet auf die nächste Suche; abweichend → Admin-Prüfung |
 | Spiel ist schon gewertet | identisch: nichts passiert; abweichend: Admin-Prüfung (nie automatisch überschrieben) |
 
 Inhalte von Webseiten können versuchen, ChatGPT Anweisungen unterzuschieben (Prompt Injection).
@@ -117,10 +118,20 @@ Das wird auf mehreren Ebenen abgefangen:
 | `RESULT_AGENT_RETRY_MINUTES` | `20` | Abstand zwischen Versuchen pro Spiel |
 | `RESULT_AGENT_MAX_CALLS_PER_DAY` | `40` | Kostenbremse: max. Abfragen pro 24 h |
 | `AGENT_TRUSTED_DOMAINS` | nfl.com, espn.com, … | erlaubte Quellen (Subdomains inklusive) |
+| `RESULT_AGENT_CONFIRM_RUNS` | `2` | unabhängige Suchen, die übereinstimmen müssen (Schutz vor manipulierten Webseiten) |
 | `AGENT_MIN_CONFIRMATIONS` | `2` | übereinstimmende Quellen verschiedener Seiten |
 | `AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF` | `60` | frühester Zeitpunkt für ein Ergebnis |
 
-## 6. Datenschutz
+## 6. Abschottung von Codex
+
+Über das Abo darf Codex **nur im Web suchen**: Shell, Dateizugriff, Browser-/Computer-Steuerung,
+Plugins und Bildfunktionen sind abgeschaltet (`features.*=false`), eigene Codex-Konfigurationen
+werden ignoriert. Eine manipulierte Webseite kann Codex also nicht dazu bringen, Dateien wie den
+Login oder den App-Schlüssel zu lesen. Das Codex-Programm ist auf eine Version gepinnt und wird
+beim Bauen per SHA-256 geprüft. Freitext des Modells wird gekürzt und von schlüsselartigen
+Zeichenketten bereinigt.
+
+## 7. Datenschutz
 
 An OpenAI gehen nur Spielpaarung, Runde und Kickoff-Zeit, keine Benutzerdaten. Über die API wird mit
 `store: false` gesendet. Über das Abo läuft jede Suche als kurzlebige Codex-Sitzung (`--ephemeral`)

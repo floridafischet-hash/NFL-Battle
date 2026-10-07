@@ -14,6 +14,7 @@ os.environ["PASSWORD_HASH_ITERATIONS"] = "1000"
 os.environ["SECRET_KEY"] = "test-secret-key-test-secret-key-0123456789"
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="nbb-uploads-")
 os.environ["AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF"] = "0"
+os.environ["RESULT_AGENT_CONFIRM_RUNS"] = "1"
 os.environ.pop("OPENAI_API_KEY", None)
 os.environ.pop("OPENAI_API_KEY_FILE", None)
 

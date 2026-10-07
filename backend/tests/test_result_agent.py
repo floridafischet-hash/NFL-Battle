@@ -381,3 +381,35 @@ async def test_points_and_bot_message(admin, players, openai):
     chat = (await players["dennis"].get("/api/chat/messages")).json()
     final_msg = [c for c in chat if c["system"] and c["system"]["type"] == "FINAL"][-1]
     assert "Florian 🎯 +3" in final_msg["body"]
+
+
+async def test_two_independent_searches_must_agree(admin, openai, monkeypatch):
+    """Prompt-injection guard: one ChatGPT answer alone never counts, a second search must agree."""
+    monkeypatch.setattr(get_settings(), "result_agent_confirm_runs", 2)
+    _, matches = await started_season(admin)
+    m = matches["AFC-WC-1"]
+    openai.answers[m["home_team"]["abbreviation"]] = final(27, 17, mid=m["id"])
+    await admin.post("/api/admin/agent/check", {"match_ids": [m["id"]]})
+    first = await run(openai)
+    assert first[0]["status"] == "PENDING_CONFIRMATION" and "unabhängige Suche" in first[0]["message"]
+    # a manipulated second answer is not applied either – it conflicts with the first one
+    openai.answers[m["home_team"]["abbreviation"]] = final(3, 0, mid=m["id"])
+    await admin.post("/api/admin/agent/check", {"match_ids": [m["id"]]})
+    assert (await run(openai))[0]["status"] == "REVIEW_REQUIRED"
+
+
+async def test_second_matching_search_applies(admin, openai, monkeypatch):
+    monkeypatch.setattr(get_settings(), "result_agent_confirm_runs", 2)
+    _, matches = await started_season(admin)
+    m = matches["AFC-WC-2"]
+    openai.answers[m["home_team"]["abbreviation"]] = final(28, 14, mid=m["id"])
+    for expected in ("PENDING_CONFIRMATION", "APPLIED"):
+        await admin.post("/api/admin/agent/check", {"match_ids": [m["id"]]})
+        assert (await run(openai))[0]["status"] == expected
+
+
+def test_model_notes_are_short_and_token_free():
+    answer = result_agent.Answer(
+        status="NOT_FOUND", home_team="BUF", away_team="PIT", note="secret: " + "A" * 60 + " " + "x" * 500
+    )
+    assert "AAAA" not in answer.note and len(answer.note) <= 200

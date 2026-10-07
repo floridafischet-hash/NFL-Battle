@@ -39,7 +39,7 @@ from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +60,26 @@ KIND_RESEARCH = "RESEARCH"
 MAX_OUTPUT_TOKENS = 8000
 MAX_TOOL_CALLS = 8
 LOGIN_HINT = "docker compose exec backend codex login --device-auth"
+# Codex may only search the web: no shell, no file/browser/computer tools, no plugins. A web page that
+# tries to instruct the model therefore cannot read files (e.g. the login or the app's secret key).
+CODEX_DISABLED_FEATURES = (
+    "shell_tool",
+    "unified_exec",
+    "shell_snapshot",
+    "apps",
+    "plugins",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "computer_use",
+    "code_mode_host",
+    "in_app_browser",
+    "multi_agent",
+    "image_generation",
+    "view_image",
+    "hooks",
+    "skill_mcp_dependency_install",
+)
 
 INSTRUCTIONS = """You verify NFL playoff results for a private tipping game.
 Use the web search to find the FINAL score of exactly the game described by the user.
@@ -120,6 +140,12 @@ class Answer(BaseModel):
     winner: str | None = Field(default=None, max_length=40)
     sources: list[AnswerSource] = Field(default_factory=list, max_length=10)
     note: str = Field(default="", max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def _short_note(cls, v: str) -> str:
+        # free text from the model is only shown to the admin – keep it short and token-free
+        return re.sub(r"[A-Za-z0-9_\-+/=.]{32,}", "[…]", v)[:200]
 
 
 class ResearchError(Exception):
@@ -324,8 +350,11 @@ async def research_codex(match: Match) -> Research:
             "--skip-git-repo-check",
             "--sandbox",
             "read-only",
+            "--ignore-user-config",
+            "--ignore-rules",
             "-c",
             'web_search="live"',
+            *[arg for feature in CODEX_DISABLED_FEATURES for arg in ("-c", f"features.{feature}=false")],
             "-c",
             f"tools.web_search.allowed_domains={domains}",
             "--output-schema",

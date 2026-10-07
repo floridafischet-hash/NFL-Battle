@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     result_agent_retry_minutes: int = Field(default=20, ge=1, le=1440)
     result_agent_max_calls_per_day: int = Field(default=40, ge=1, le=1000)
     result_agent_max_matches_per_run: int = Field(default=3, ge=1, le=13)
+    # independent ChatGPT searches that must report the same score before it counts (prompt-injection guard)
+    result_agent_confirm_runs: int = Field(default=2, ge=1, le=5)
 
     # Validation of reported results (applies to every ChatGPT answer)
     agent_trusted_domains: str = (

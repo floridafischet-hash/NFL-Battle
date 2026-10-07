@@ -22,6 +22,7 @@ FAKE_CODEX = textwrap.dedent(
         sys.exit(0 if ok else 1)
     assert args[0] == "exec" and "--json" in args and "--output-schema" in args
     assert any(a.startswith("tools.web_search.allowed_domains=") for a in args)
+    assert "features.shell_tool=false" in args and "--ignore-user-config" in args
     assert "OPENAI_API_KEY" not in os.environ and "DATABASE_URL" not in os.environ
     out = args[args.index("--output-last-message") + 1]
     prompt = args[-1]
