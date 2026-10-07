@@ -168,6 +168,17 @@ async def update_user(
     return user_admin_out(user)
 
 
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: uuid.UUID, admin: CurrentAdmin, session: DBSession) -> None:
+    user = await _user(session, user_id)
+    if user.id == admin.user_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Du kannst deinen eigenen Adminzugang nicht löschen.")
+    old = {"username": user.username, "display_name": user.display_name, "role": user.role.value}
+    audit(session, admin, "USER_DELETED", "user", user.id, old, None, source="ADMIN")
+    await session.delete(user)
+    await session.commit()
+
+
 @router.post("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
 async def reset_password(
     user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentSuperuser, session: DBSession

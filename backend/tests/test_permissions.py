@@ -3,6 +3,7 @@ import pytest
 ADMIN_ENDPOINTS = [
     ("get", "/api/admin/users"),
     ("post", "/api/admin/users"),
+    ("delete", "/api/admin/users/00000000-0000-0000-0000-000000000000"),
     ("post", "/api/admin/seasons"),
     ("get", "/api/admin/audit"),
     ("get", "/api/admin/agent/overview"),

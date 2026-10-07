@@ -82,6 +82,29 @@ async def test_admin_cannot_demote_or_block_self(admin):
     me = (await admin.get("/api/me")).json()
     assert (await admin.patch(f"/api/admin/users/{me['id']}", {"role": "USER"})).status_code == 409
     assert (await admin.patch(f"/api/admin/users/{me['id']}", {"is_active": False})).status_code == 409
+    assert (await admin.delete(f"/api/admin/users/{me['id']}")).status_code == 409
+
+
+async def test_admin_deletes_user_and_keeps_audit_history(admin):
+    await create_user("kevin")
+    kevin = await login("kevin")
+    users = (await admin.get("/api/admin/users")).json()
+    kevin_id = next(u["id"] for u in users if u["username"] == "kevin")
+
+    r = await admin.delete(f"/api/admin/users/{kevin_id}")
+    assert r.status_code == 204
+    assert (await kevin.get("/api/me")).status_code == 401
+    assert (await Api().post("/api/auth/login", {"username": "kevin", "password": "secret123"})).status_code == 401
+    assert all(u["id"] != kevin_id for u in (await admin.get("/api/admin/users")).json())
+
+    async with get_sessionmaker()() as session:
+        deleted = (
+            await session.execute(
+                text("SELECT count(*) FROM audit_logs WHERE action = 'USER_DELETED' AND object_id = :user_id"),
+                {"user_id": kevin_id},
+            )
+        ).scalar_one()
+        assert deleted == 1
 
 
 async def test_login_is_rate_limited(monkeypatch):

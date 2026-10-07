@@ -97,7 +97,9 @@ class AuditLog(Base):
         DateTime(timezone=True), server_default=func.now(), default=utcnow, nullable=False
     )
     actor_type: Mapped[str] = mapped_column(String(10), nullable=False)
-    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    # Keep the actor UUID after a user is deleted. A foreign key with ON DELETE SET NULL would
+    # mutate this append-only table and therefore conflict with its immutability trigger.
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     actor_label: Mapped[str] = mapped_column(String(120), nullable=False)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     object_type: Mapped[str] = mapped_column(String(40), nullable=False)

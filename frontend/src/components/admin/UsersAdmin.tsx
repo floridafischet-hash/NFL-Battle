@@ -2,13 +2,13 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { KeyRound, ListChecks, UserPlus } from "lucide-react";
+import { KeyRound, ListChecks, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Badge, Button, Card, Input, Loading, Modal, Select } from "@/components/ui";
-import { get, patch, post } from "@/lib/api";
+import { del, get, patch, post } from "@/lib/api";
 import { useMe } from "@/lib/auth";
 import { slotLabel } from "@/lib/bracket";
 import { dateTime, relativeTime } from "@/lib/format";
@@ -146,6 +146,7 @@ export function UsersAdmin() {
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [tipsUser, setTipsUser] = useState<AdminUser | null>(null);
+  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
 
   const update = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) => patch(`/api/admin/users/${id}`, body),
@@ -163,6 +164,15 @@ export function UsersAdmin() {
       setNewPassword("");
     },
     onError: (e) => toast.error("Zurücksetzen fehlgeschlagen", errorText(e)),
+  });
+  const remove = useMutation({
+    mutationFn: () => del(`/api/admin/users/${deleteUser!.id}`),
+    onSuccess: () => {
+      toast.success("Benutzer gelöscht", `${deleteUser?.display_name ?? "Der Benutzer"} wurde dauerhaft entfernt.`);
+      setDeleteUser(null);
+      users.refetch();
+    },
+    onError: (e) => toast.error("Löschen fehlgeschlagen", errorText(e)),
   });
 
   return (
@@ -239,6 +249,11 @@ export function UsersAdmin() {
                             Aktivieren
                           </Button>
                         ))}
+                      {u.id !== me.id && (
+                        <Button size="sm" variant="danger" onClick={() => setDeleteUser(u)} title="Benutzer dauerhaft löschen">
+                          <Trash2 className="size-4" /> Löschen
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -266,6 +281,23 @@ export function UsersAdmin() {
             </Button>
           </div>
         </form>
+      </Modal>
+      <Modal open={!!deleteUser} onClose={() => setDeleteUser(null)} title={`Benutzer ${deleteUser?.display_name ?? ""} löschen?`}>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-300">
+            Der Benutzer <strong className="text-white">@{deleteUser?.username}</strong> sowie seine Tipps, Punkte,
+            Chatnachrichten und Benachrichtigungen werden dauerhaft gelöscht. Die Audit-Historie bleibt erhalten.
+          </p>
+          <p className="text-sm font-semibold text-red-300">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" onClick={() => setDeleteUser(null)}>
+              Abbrechen
+            </Button>
+            <Button type="button" variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+              Dauerhaft löschen
+            </Button>
+          </div>
+        </div>
       </Modal>
       <PredictionsModal user={tipsUser} onClose={() => setTipsUser(null)} />
     </Card>
