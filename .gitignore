@@ -1,7 +1,12 @@
-# Secrets & local config
+# Secrets & local config – never commit keys or passwords
 .env
 .env.*
 !.env.example
+secrets/
+*.key
+*.pem
+*.p12
+openai_api_key*
 
 # Python
 __pycache__/

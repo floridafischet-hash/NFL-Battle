@@ -1,5 +1,10 @@
-"""The 32 NFL teams (master data). Logos are referenced by URL and can be replaced at any time
-(admin upload or by dropping a file into frontend/public/logos/<ABBR>.svg)."""
+"""The 32 NFL teams (master data).
+
+Logos: by default the official team logos are referenced from ESPN's logo CDN (mapping from the
+nflverse team table, github.com/nflverse/nflfastR-data, ``team_logo_espn``). The image files are not
+stored in this repository; the browser loads them directly. If a logo cannot be loaded the frontend
+falls back to the neutral crest in frontend/public/logos/<ABBR>.svg. Every logo can be replaced in
+the admin area (upload or URL)."""
 
 # (abbreviation, city, short_name, conference, division, primary, secondary)
 NFL_TEAMS: list[tuple[str, str, str, str, str, str, str]] = [
@@ -38,5 +43,45 @@ NFL_TEAMS: list[tuple[str, str, str, str, str, str, str]] = [
 ]
 
 
-def default_logo_url(abbreviation: str) -> str:
+OFFICIAL_LOGOS: dict[str, str] = {
+    "BUF": "https://a.espncdn.com/i/teamlogos/nfl/500/buf.png",
+    "MIA": "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png",
+    "NE": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+    "NYJ": "https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png",
+    "BAL": "https://a.espncdn.com/i/teamlogos/nfl/500/bal.png",
+    "CIN": "https://a.espncdn.com/i/teamlogos/nfl/500/cin.png",
+    "CLE": "https://a.espncdn.com/i/teamlogos/nfl/500/cle.png",
+    "PIT": "https://a.espncdn.com/i/teamlogos/nfl/500/pit.png",
+    "HOU": "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png",
+    "IND": "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png",
+    "JAX": "https://a.espncdn.com/i/teamlogos/nfl/500/jax.png",
+    "TEN": "https://a.espncdn.com/i/teamlogos/nfl/500/ten.png",
+    "DEN": "https://a.espncdn.com/i/teamlogos/nfl/500/den.png",
+    "KC": "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png",
+    "LV": "https://a.espncdn.com/i/teamlogos/nfl/500/lv.png",
+    "LAC": "https://a.espncdn.com/i/teamlogos/nfl/500/lac.png",
+    "DAL": "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png",
+    "NYG": "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png",
+    "PHI": "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png",
+    "WAS": "https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png",
+    "CHI": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png",
+    "DET": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png",
+    "GB": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png",
+    "MIN": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
+    "ATL": "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png",
+    "CAR": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/car.png",
+    "NO": "https://a.espncdn.com/i/teamlogos/nfl/500/no.png",
+    "TB": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+    "ARI": "https://a.espncdn.com/i/teamlogos/nfl/500/ari.png",
+    "LAR": "https://a.espncdn.com/i/teamlogos/nfl/500/lar.png",
+    "SF": "https://a.espncdn.com/i/teamlogos/nfl/500/sf.png",
+    "SEA": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
+}
+
+
+def neutral_logo_url(abbreviation: str) -> str:
     return f"/logos/{abbreviation}.svg"
+
+
+def default_logo_url(abbreviation: str) -> str:
+    return OFFICIAL_LOGOS.get(abbreviation, neutral_logo_url(abbreviation))

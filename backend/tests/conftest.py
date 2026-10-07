@@ -14,6 +14,8 @@ os.environ["PASSWORD_HASH_ITERATIONS"] = "1000"
 os.environ["SECRET_KEY"] = "test-secret-key-test-secret-key-0123456789"
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="nbb-uploads-")
 os.environ["AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF"] = "0"
+os.environ.pop("OPENAI_API_KEY", None)
+os.environ.pop("OPENAI_API_KEY_FILE", None)
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
 from typing import Any  # noqa: E402
@@ -58,7 +60,7 @@ def migrated_db():
 
 
 TABLES = (
-    "audit_logs, result_reports, agent_runs, agent_tokens, notifications, chat_messages, system_messages, uploads, "
+    "audit_logs, result_reports, agent_runs, notifications, chat_messages, system_messages, uploads, "
     "hall_of_fame, leaderboards, scores, prediction_changes, predictions, brackets, matches, season_teams, seasons, "
     "teams, users"
 )

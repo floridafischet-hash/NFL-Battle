@@ -32,7 +32,7 @@ from app.models import (
     User,
 )
 from app.models.enums import MatchStatus, ResultSource, Role
-from app.seed.teams import NFL_TEAMS, default_logo_url
+from app.seed.teams import NFL_TEAMS, default_logo_url, neutral_logo_url
 from app.services import bot
 from app.services.bracket_engine import Pick, slots_in_resolution_order
 from app.services.brackets import load_context, picks_by_slot
@@ -88,6 +88,9 @@ async def ensure_teams(session) -> dict[str, Team]:
             )
             session.add(team)
             existing[abbr] = team
+        elif existing[abbr].logo_url in (None, "", neutral_logo_url(abbr)):
+            # older installs: neutral crest → official logo (uploaded or custom logos stay untouched)
+            existing[abbr].logo_url = default_logo_url(abbr)
     await session.flush()
     return existing
 
@@ -127,7 +130,7 @@ class Demo:
     def __init__(self, session, admin: User, users: list[User], teams: dict[str, Team]):
         self.session = session
         self.admin = admin
-        self.principal = Principal("user", admin.display_name, frozenset({"USER", "ADMIN"}), admin, None, None)
+        self.principal = Principal("user", admin.display_name, frozenset({"USER", "ADMIN"}), admin)
         self.users = users
         self.teams = teams
         self.favor = {u.username: f for (u, (_, _, f)) in zip(users, DEMO_USERS, strict=True)}
@@ -285,23 +288,26 @@ async def seed_demo(session, admin: User, teams: dict[str, Team]) -> None:
     if (await session.execute(select(func.count(Season.id)))).scalar_one() > 0:
         log.info("seasons already exist – demo data skipped")
         return
-    demo_password = settings.demo_user_password
-    if is_placeholder(demo_password):
-        demo_password = random_password(8)
-        banner(f"Demo-Benutzer (florian, dennis, stefan, marcel, lisa, kevin, tobi) – Passwort '{demo_password}'")
-    demo_hash = hash_password(demo_password)
+    # every demo user gets an own random password (printed once) unless DEMO_USER_PASSWORD is set
+    shared = None if is_placeholder(settings.demo_user_password) else settings.demo_user_password
     users = []
+    created: list[str] = []
     for username, display, _ in DEMO_USERS:
         user = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
         if user is None:
+            password = shared or random_password(10)
             user = User(
                 username=username,
                 display_name=display,
                 role=Role.USER,
-                password_hash=demo_hash,
+                password_hash=hash_password(password),
             )
             session.add(user)
+            if shared is None:
+                created.append(f"{username}: {password}")
         users.append(user)
+    if created:
+        banner("Demo-Benutzer (bitte Passwörter weitergeben, danach ändern lassen):\n  " + "\n  ".join(created))
     await session.flush()
     demo = Demo(session, admin, users, teams)
     await bot.get_bot_user(session)

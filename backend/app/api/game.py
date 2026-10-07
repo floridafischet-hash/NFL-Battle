@@ -53,7 +53,7 @@ async def list_teams(principal: CurrentUser, session: DBSession) -> list[Team]:
 
 @router.get("/seasons/{season_id}/teams", response_model=list[TeamOut])
 async def season_teams(season_id: int, principal: CurrentUser, session: DBSession) -> list[TeamOut]:
-    ctx = await bracket_service.load_context(session, await resolve_season(session, season_id))
+    ctx = await bracket_service.load_context(session, await resolve_season(session, season_id, principal))
     seeds = ctx.seeds
     out = [team_out(st.team, seeds) for st in ctx.season_teams]
     return sorted([t for t in out if t], key=lambda t: (t.conference, t.seed or 99))
@@ -76,7 +76,7 @@ def _pick_out(p: Prediction | None) -> dict[str, Any] | None:
 
 @router.get("/seasons/{season_id}/matches")
 async def season_matches(season_id: int, principal: CurrentUser, session: DBSession) -> list[dict[str, Any]]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     ctx = await bracket_service.load_context(session, season)
     assert principal.user is not None
     picks = await _my_picks(session, principal.user.id, season.id)
@@ -102,7 +102,7 @@ async def match_detail(match_id: int, principal: CurrentUser, session: DBSession
     match = await session.get(Match, match_id)
     if match is None:
         raise not_found("Spiel")
-    season = await resolve_season(session, match.season_id)
+    season = await resolve_season(session, match.season_id, principal)
     if season.status == SeasonStatus.DRAFT and not principal.is_admin:
         raise not_found("Spiel")
     ctx = await bracket_service.load_context(session, season)
@@ -181,7 +181,7 @@ async def _owner(session, principal: Principal, user_id: str) -> User:
 
 @router.get("/seasons/{season_id}/bracket/{user_id}")
 async def get_bracket(season_id: int, user_id: str, principal: CurrentUser, session: DBSession) -> dict[str, Any]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     owner = await _owner(session, principal, user_id)
     ctx = await bracket_service.load_context(session, season)
     return await bracket_service.bracket_view(session, ctx, owner, principal)
@@ -193,7 +193,7 @@ async def put_pick(
 ) -> dict[str, Any]:
     if slot not in SLOTS:
         raise not_found("Slot")
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     await bracket_service.set_pick(
         session, principal, season, slot, body.winner_team_id, body.winner_score, body.loser_score
     )
@@ -205,7 +205,7 @@ async def put_pick(
 async def delete_pick(season_id: int, slot: str, principal: CurrentUser, session: DBSession) -> dict[str, Any]:
     if slot not in SLOTS:
         raise not_found("Slot")
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     await bracket_service.clear_pick(session, principal, season, slot)
     ctx = await bracket_service.load_context(session, season)
     return await bracket_service.bracket_view(session, ctx, principal.user, principal)  # type: ignore[arg-type]
@@ -213,7 +213,7 @@ async def delete_pick(season_id: int, slot: str, principal: CurrentUser, session
 
 @router.post("/seasons/{season_id}/bracket/me/submit")
 async def submit(season_id: int, principal: CurrentUser, session: DBSession) -> dict[str, Any]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     await bracket_service.submit_bracket(session, principal, season)
     ctx = await bracket_service.load_context(session, season)
     return await bracket_service.bracket_view(session, ctx, principal.user, principal)  # type: ignore[arg-type]
@@ -221,7 +221,7 @@ async def submit(season_id: int, principal: CurrentUser, session: DBSession) -> 
 
 @router.get("/seasons/{season_id}/brackets")
 async def all_brackets(season_id: int, principal: CurrentUser, session: DBSession) -> list[dict[str, Any]]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     ctx = await bracket_service.load_context(session, season)
     return await bracket_service.brackets_overview(session, ctx, principal)
 
@@ -230,7 +230,7 @@ async def all_brackets(season_id: int, principal: CurrentUser, session: DBSessio
 async def compare_brackets(
     season_id: int, principal: CurrentUser, session: DBSession, a: str = Query(...), b: str = Query(...)
 ) -> dict[str, Any]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     ctx = await bracket_service.load_context(session, season)
     view_a = await bracket_service.bracket_view(session, ctx, await _owner(session, principal, a), principal)
     view_b = await bracket_service.bracket_view(session, ctx, await _owner(session, principal, b), principal)
@@ -252,7 +252,7 @@ async def compare_brackets(
 
 @router.get("/seasons/{season_id}/distribution")
 async def community_distribution(season_id: int, principal: CurrentUser, session: DBSession) -> list[dict[str, Any]]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     ctx = await bracket_service.load_context(session, season)
     return list((await bracket_service.distribution(session, ctx)).values())
 
@@ -278,14 +278,14 @@ def _leader_out(lb: Leaderboard, me: uuid.UUID | None) -> dict[str, Any]:
 
 @router.get("/seasons/{season_id}/leaderboard")
 async def leaderboard(season_id: int, principal: CurrentUser, session: DBSession) -> list[dict[str, Any]]:
-    season = await resolve_season(session, season_id)
+    season = await resolve_season(session, season_id, principal)
     return [_leader_out(lb, principal.user_id) for lb in await leaderboard_rows(session, season.id)]
 
 
 @router.get("/dashboard")
 async def dashboard(principal: CurrentUser, session: DBSession, season_id: int | None = None) -> dict[str, Any]:
     assert principal.user is not None
-    season = await resolve_season(session, season_id) if season_id else await get_current_season(session)
+    season = await resolve_season(session, season_id, principal) if season_id else await get_current_season(session)
     if season is None:
         return {"season": None}
     ctx = await bracket_service.load_context(session, season)

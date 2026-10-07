@@ -1,12 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Check, Copy, KeyRound, RefreshCw, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { Bot, Check, PlugZap, RefreshCw, Settings2, X } from "lucide-react";
 
 import { TeamLogo } from "@/components/TeamLogo";
-import { Badge, Button, Card, EmptyState, Input, Loading, Modal } from "@/components/ui";
-import { del, get, post } from "@/lib/api";
+import { Badge, Button, Card, EmptyState, Loading } from "@/components/ui";
+import { get, post } from "@/lib/api";
 import { slotLabel } from "@/lib/bracket";
 import { dateTime, relativeTime } from "@/lib/format";
 import { useToast } from "@/lib/toast";
@@ -38,17 +37,30 @@ interface Report {
   review_reason: string | null;
   created_at: string;
 }
+interface AgentConfig {
+  enabled: boolean;
+  configured: boolean;
+  has_key: boolean;
+  model: string;
+  trusted_domains: string[];
+  min_confirmations: number;
+  first_check_minutes: number;
+  retry_minutes: number;
+  max_calls_per_day: number;
+  calls_last_24h: number;
+}
 interface Overview {
+  config: AgentConfig;
   last_run: Run | null;
   runs: Run[];
   errors: Run[];
-  tokens: { id: number; name: string; token_prefix: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[];
   reports: Report[];
 }
 
 const TONE: Record<string, "green" | "red" | "amber" | "neutral" | "gold"> = {
   APPLIED: "green",
   OK: "green",
+  NO_RESULT: "neutral",
   DUPLICATE: "neutral",
   PENDING_CONFIRMATION: "gold",
   REVIEW_REQUIRED: "amber",
@@ -61,34 +73,22 @@ export function AgentAdmin() {
   const toast = useToast();
   const invalidate = useInvalidateAdmin();
   const data = useQuery({ queryKey: ["agent-overview"], queryFn: () => get<Overview>("/api/admin/agent/overview"), refetchInterval: 30_000 });
-  const [tokenName, setTokenName] = useState("OpenClaw");
-  const [newToken, setNewToken] = useState<string | null>(null);
   const refresh = () => {
     data.refetch();
     invalidate();
   };
-  const createToken = useMutation({
-    mutationFn: () => post<{ token: string }>("/api/admin/agent/tokens", { name: tokenName }),
-    onSuccess: (r) => {
-      setNewToken(r.token);
-      refresh();
-    },
-    onError: (e) => toast.error("Token nicht erstellt", errorText(e)),
-  });
-  const revoke = useMutation({
-    mutationFn: (id: number) => del(`/api/admin/agent/tokens/${id}`),
-    onSuccess: () => {
-      refresh();
-      toast.success("Token widerrufen");
-    },
+  const testConnection = useMutation({
+    mutationFn: () => post<{ ok: boolean; message: string }>("/api/admin/agent/test"),
+    onSuccess: (r) => (r.ok ? toast.success("ChatGPT erreichbar", r.message) : toast.error("ChatGPT nicht erreichbar", r.message)),
+    onError: (e) => toast.error("Test fehlgeschlagen", errorText(e)),
   });
   const check = useMutation({
     mutationFn: () => post<{ message: string }>("/api/admin/agent/check", {}),
     onSuccess: (r) => {
       refresh();
-      toast.success("Ergebnisprüfung gestartet", r.message);
+      toast.success("Prüfung angestoßen", `${r.message} ChatGPT sucht innerhalb einer Minute.`);
     },
-    onError: (e) => toast.error("Ergebnisprüfung fehlgeschlagen", errorText(e)),
+    onError: (e) => toast.error("Prüfung fehlgeschlagen", errorText(e)),
   });
   const decide = useMutation({
     mutationFn: ({ id, action }: { id: number; action: "accept" | "reject" }) => post(`/api/admin/agent/reports/${id}/${action}`),
@@ -101,15 +101,42 @@ export function AgentAdmin() {
 
   if (data.isLoading) return <Loading />;
   const d = data.data!;
+  const c = d.config;
   const review = d.reports.filter((r) => r.status === "REVIEW_REQUIRED" || r.status === "PENDING_CONFIRMATION");
 
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title={<span className="flex items-center gap-2"><Bot className="size-4 text-gold" /> Letzter OpenClaw-Lauf</span>}
+        <Card title={<span className="flex items-center gap-2"><Settings2 className="size-4 text-gold" /> ChatGPT-Ergebnis-Agent</span>}
           action={
-            <Button size="sm" onClick={() => check.mutate()} loading={check.isPending}>
-              <RefreshCw className="size-4" /> Ergebnisprüfung starten
+            <Button size="sm" onClick={() => testConnection.mutate()} loading={testConnection.isPending}>
+              <PlugZap className="size-4" /> Verbindung testen
+            </Button>
+          }
+        >
+          <div className="space-y-2 text-sm" data-testid="agent-config">
+            <p className="flex flex-wrap items-center gap-2">
+              {c.configured ? <Badge tone="green">aktiv</Badge> : <Badge tone="red">{c.enabled ? "kein API-Key" : "deaktiviert"}</Badge>}
+              <span className="text-slate-300">Modell <code className="text-gold">{c.model}</code></span>
+            </p>
+            {!c.configured && (
+              <p className="text-amber-100">
+                {c.enabled
+                  ? "OPENAI_API_KEY in der .env auf dem Server eintragen und das Backend neu starten (docs/CHATGPT.md). Bis dahin trägst du Ergebnisse unter „Spiele“ ein."
+                  : "RESULT_AGENT_ENABLED=false – Ergebnisse werden unter „Spiele“ eingetragen."}
+              </p>
+            )}
+            <p className="text-slate-400">
+              Prüft {c.first_check_minutes} Min. nach Kickoff, danach alle {c.retry_minutes} Min. · braucht {c.min_confirmations} übereinstimmende Quelle(n) ·
+              Abrufe 24 h: <strong className="text-white">{c.calls_last_24h}/{c.max_calls_per_day}</strong>
+            </p>
+            <p className="text-xs text-slate-500">Vertrauenswürdige Seiten: {c.trusted_domains.join(", ")}</p>
+          </div>
+        </Card>
+        <Card title={<span className="flex items-center gap-2"><Bot className="size-4 text-gold" /> Letzter Lauf</span>}
+          action={
+            <Button size="sm" onClick={() => check.mutate()} loading={check.isPending} disabled={!c.configured}>
+              <RefreshCw className="size-4" /> Jetzt prüfen
             </Button>
           }
         >
@@ -121,44 +148,11 @@ export function AgentAdmin() {
                 <span className="text-slate-500">· {relativeTime(d.last_run.started_at)}</span>
               </p>
               <p className="text-slate-300">{d.last_run.message}</p>
-              <p className="text-xs text-slate-500">Agent: {d.last_run.agent_label}</p>
+              <p className="text-xs text-slate-500">{d.last_run.agent_label}</p>
             </div>
           ) : (
-            <EmptyState title="Noch kein Agent-Aufruf">Erstelle einen Token und hinterlege ihn in OpenClaw (siehe docs/OPENCLAW.md).</EmptyState>
+            <EmptyState title="Noch kein Lauf">ChatGPT sucht automatisch nach Spielende; „Jetzt prüfen“ startet die Suche sofort.</EmptyState>
           )}
-        </Card>
-        <Card title={<span className="flex items-center gap-2"><KeyRound className="size-4 text-gold" /> API-Tokens (Rolle AGENT)</span>}>
-          <form
-            className="mb-4 flex items-end gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              createToken.mutate();
-            }}
-          >
-            <Input label="Name" value={tokenName} onChange={(e) => setTokenName(e.target.value)} minLength={2} required />
-            <Button type="submit" variant="primary" loading={createToken.isPending} className="shrink-0">
-              Token erstellen
-            </Button>
-          </form>
-          <ul className="divide-y divide-white/5 text-sm">
-            {d.tokens.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 py-2">
-                <span className="flex-1">
-                  <span className="font-semibold text-white">{t.name}</span> <code className="text-xs text-slate-400">{t.token_prefix}…</code>
-                  <span className="block text-xs text-slate-500">
-                    erstellt {dateTime(t.created_at)} · {t.last_used_at ? `zuletzt ${relativeTime(t.last_used_at)}` : "nie benutzt"}
-                  </span>
-                </span>
-                {t.revoked_at ? (
-                  <Badge tone="red">widerrufen</Badge>
-                ) : (
-                  <Button size="sm" variant="ghost" onClick={() => revoke.mutate(t.id)} aria-label={`Token ${t.name} widerrufen`}>
-                    <Trash2 className="size-4" />
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
         </Card>
       </div>
 
@@ -235,7 +229,7 @@ export function AgentAdmin() {
             </table>
           </div>
         </Card>
-        <Card title={`Agent-Läufe · Fehler (${d.errors.length})`} bodyClassName="p-0">
+        <Card title={`Läufe · Fehler (${d.errors.length})`} bodyClassName="p-0">
           <div className="max-h-[480px] overflow-auto">
             <ul className="divide-y divide-white/5">
               {d.runs.map((r) => (
@@ -254,23 +248,6 @@ export function AgentAdmin() {
         </Card>
       </div>
 
-      <Modal open={!!newToken} onClose={() => setNewToken(null)} title="Neuer Agent-Token">
-        <p className="mb-3 text-sm text-amber-100">Dieser Token wird nur jetzt angezeigt. Hinterlege ihn sicher in OpenClaw.</p>
-        <div className="flex items-center gap-2 rounded-xl bg-black/40 p-3">
-          <code className="flex-1 text-xs break-all text-gold" data-testid="agent-token">
-            {newToken}
-          </code>
-          <Button
-            size="sm"
-            onClick={() => {
-              navigator.clipboard?.writeText(newToken ?? "").then(() => toast.success("Kopiert"));
-            }}
-            aria-label="Token kopieren"
-          >
-            <Copy className="size-4" />
-          </Button>
-        </div>
-      </Modal>
     </div>
   );
 }

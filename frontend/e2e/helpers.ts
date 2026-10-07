@@ -42,3 +42,18 @@ export async function call<T = any>(
 export function isoOffset(minutes: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
+
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8090";
+export const MOCK_URL = process.env.E2E_MOCK_URL ?? "http://localhost:8091";
+
+/** Browser storage state of a logged-in user – reuses an existing token instead of logging in again
+ * (nginx allows only a handful of logins per minute and IP). */
+export function tokenState(token: string) {
+  return { cookies: [], origins: [{ origin: new URL(BASE_URL).origin, localStorage: [{ name: "nbb.token", value: token }] }] };
+}
+
+/** Tell the OpenAI mock (scripts/openai_mock.py) the real scores, keyed by the home team. */
+export async function mockResults(request: APIRequestContext, results: Record<string, [number, number]>) {
+  const r = await request.post(`${MOCK_URL}/__mock/results`, { data: results });
+  expect(r.status()).toBe(200);
+}

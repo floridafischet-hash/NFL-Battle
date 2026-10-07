@@ -1,6 +1,7 @@
 # API-Dokumentation
 
-Interaktive OpenAPI-Dokumentation: **`/api/docs`** (Swagger UI), Schema: `/api/openapi.json`.
+Interaktive OpenAPI-Dokumentation: **`/api/docs`** (Swagger UI), Schema: `/api/openapi.json` – nur wenn
+`APP_ENV` nicht `production` ist (in Produktion abgeschaltet).
 
 Alle Endpunkte (außer `public` und `auth/login`) erwarten `Authorization: Bearer <token>`.
 Fehler werden als `{"detail": "…"}` (deutsch) mit passendem HTTP-Status geliefert.
@@ -8,7 +9,7 @@ Fehler werden als `{"detail": "…"}` (deutsch) mit passendem HTTP-Status gelief
 | Status | Bedeutung |
 |---|---|
 | 401 | nicht angemeldet / Token ungültig oder abgelaufen |
-| 403 | falsche Rolle (z. B. Agent auf User-Endpunkt) oder Benutzer gesperrt |
+| 403 | falsche Rolle (z. B. Spieler auf Admin-Endpunkt) oder Benutzer gesperrt |
 | 404 | nicht gefunden |
 | 409 | Konflikt (z. B. Spiel gesperrt, Antrag schon offen, Folgespiel bereits gewertet) |
 | 413/415 | Upload zu groß / kein gültiges Bild |
@@ -102,17 +103,17 @@ Fehler werden als `{"detail": "…"}` (deutsch) mit passendem HTTP-Status gelief
 | POST | `/api/admin/matches/{id}/reset-result` | Ergebnis zurücksetzen (FINAL → LOCKED) |
 | GET | `/api/admin/change-requests?status=PENDING` | Änderungsanträge |
 | POST | `/api/admin/change-requests/{id}/approve\|reject` | `{note?}` |
-| GET | `/api/admin/agent/overview` | Läufe, Fehler, Tokens, Meldungen |
-| POST/DELETE | `/api/admin/agent/tokens[/{id}]` | Agent-Token erstellen (einmalig sichtbar) / widerrufen |
-| POST | `/api/admin/agent/check` | „Ergebnisprüfung starten“ |
+| GET | `/api/admin/agent/overview` | ChatGPT-Status (`config`, ohne Key), Läufe, Fehler, Meldungen |
+| POST | `/api/admin/agent/check` | „Jetzt prüfen“ `{match_ids?}` – ChatGPT sucht innerhalb einer Minute |
+| POST | `/api/admin/agent/test` | „Verbindung testen“ (Key + Modell, kostenlos) |
 | POST | `/api/admin/agent/reports/{id}/accept\|reject` | REVIEW_REQUIRED-Meldung übernehmen/verwerfen |
 | GET | `/api/admin/audit` | Audit-Log (Filter `action`, `actor_type`, `object_type`, `q`, Paging `before`) |
 | GET | `/api/admin/summary` | Kennzahlen für die Admin-Übersicht |
 
-## Agent (AGENT) – siehe [OPENCLAW.md](OPENCLAW.md)
+## Ergebnis-Agent
 
-`GET /api/agent/whoami`, `GET /api/agent/matches`, `GET /api/agent/matches/pending`,
-`POST /api/agent/results`, `POST /api/agent/schedule`, `POST /api/agent/events`
+Es gibt keine eingehende Agent-API. Ergebnisse sucht der ChatGPT-Agent im Backend – siehe
+[CHATGPT.md](CHATGPT.md).
 
 ## WebSocket `/ws`
 

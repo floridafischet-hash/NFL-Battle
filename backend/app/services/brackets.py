@@ -123,6 +123,8 @@ def missing_open_picks(ctx: SeasonContext, resolved: dict[str, ResolvedSlot]) ->
 def ensure_season_playable(season: Season) -> None:
     if season.status == SeasonStatus.COMPLETED:
         raise HTTPException(status.HTTP_409_CONFLICT, "Die Saison ist abgeschlossen.")
+    if season.status == SeasonStatus.DRAFT:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Die Saison ist noch nicht freigegeben.")
 
 
 async def set_pick(

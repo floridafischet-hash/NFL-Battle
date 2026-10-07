@@ -6,7 +6,7 @@ ADMIN_ENDPOINTS = [
     ("post", "/api/admin/seasons"),
     ("get", "/api/admin/audit"),
     ("get", "/api/admin/agent/overview"),
-    ("post", "/api/admin/agent/tokens"),
+    ("post", "/api/admin/agent/test"),
     ("get", "/api/admin/change-requests"),
     ("post", "/api/admin/matches/1/result"),
     ("post", "/api/admin/seasons/1/recalculate"),
