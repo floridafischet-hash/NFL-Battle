@@ -12,7 +12,7 @@
 | 8 | **Endstand-Tipp als Sieger-/Verliererpunkte gespeichert** | Robust, wenn sich die Paarung erst später ergibt (Tipp gehört zum Sieger, nicht zu Heim/Gast). |
 | 9 | **Fremde Tipps erst nach dem Tipp-Lock sichtbar** (pro Spiel) | Verhindert Abschreiben vollständig; abgeleitete Paarungen fremder Brackets werden nur aus aufgedeckten Tipps berechnet. Vorher sieht man nur, *ob* jemand getippt hat. |
 | 10 | **Punkte idempotent neu berechnet** (`scores` mit Unique-Constraint) | Keine Doppelvergabe; Korrekturen und Änderungen am Punktesystem jederzeit sauber nachrechenbar. |
-| 11 | **ChatGPT im Backend statt externer Agent-API** (OpenAI Responses API mit Websuche; Domain-Allowlist, nur belegte Quellen, 2 Bestätigungen) | Ausdrücklicher Wunsch: Ergebnisse per ChatGPT, OpenClaw-Zugang entfernt. Kein eingehender Maschinen-Zugang mehr ⇒ kleinere Angriffsfläche. Die Antwort des Modells gilt als unsichere Eingabe: Schema, belegte Quellen, übereinstimmende Seiten; Unsicheres landet als REVIEW_REQUIRED beim Admin, gewertete Spiele werden nie automatisch überschrieben. Kostenbremse über Tageslimit. |
+| 11 | **ChatGPT im Backend statt externer Agent-API** (Standard: ChatGPT-Abo über die offizielle Codex CLI, alternativ OpenAI Responses API; Websuche; Domain-Allowlist, nur belegte Quellen, 2 Bestätigungen) | Ausdrücklicher Wunsch: Ergebnisse per ChatGPT, OpenClaw-Zugang entfernt. Kein eingehender Maschinen-Zugang mehr ⇒ kleinere Angriffsfläche. Die Antwort des Modells gilt als unsichere Eingabe: Schema, belegte Quellen, übereinstimmende Seiten; Unsicheres landet als REVIEW_REQUIRED beim Admin, gewertete Spiele werden nie automatisch überschrieben. Kostenbremse über Tageslimit. |
 | 12 | **Audit-Log append-only per DB-Trigger** | Auch ein Fehler im Code kann Protokolleinträge nicht verändern oder löschen. |
 | 13 | **Uploads neu kodiert (Pillow → WebP), kein SVG** | Entfernt Metadaten und verhindert Script-Injection über Bilddateien. |
 | 14 | **Offizielle Team-Logos per `logo_url` vom ESPN-Logo-CDN**, neutrale Wappen als Fallback | Ausdrücklicher Wunsch (privater Gebrauch). Die Logos werden nur verlinkt, nicht im Repository gespeichert; fällt das CDN aus, zeigt das Frontend das generierte Wappen. Jedes Logo ist im Admin austauschbar. |
@@ -28,5 +28,5 @@
 - Rollen- oder Passwortänderungen wirken sofort; eine Abmeldung „aller Geräte“ gibt es nur über die Passwortänderung.
 - Rate-Limits im Backend gelten pro Instanz (Nginx limitiert zusätzlich pro IP).
 - Die Demo-Daten liegen zeitlich relativ zum Installationszeitpunkt. Nach einigen Tagen sind die offenen Demo-Spiele gesperrt und warten auf Ergebnisse.
-- Der ChatGPT-Agent braucht einen kostenpflichtigen OpenAI-API-Key (kein ChatGPT-Plus-Abo); ohne Key werden Ergebnisse manuell eingetragen.
+- Der ChatGPT-Agent braucht ein ChatGPT-Abo (Plus/Pro, Login über die Codex CLI) oder einen OpenAI-API-Key; ohne werden Ergebnisse manuell eingetragen. Das Abo-Kontingent ist begrenzt (Tageslimit in der App).
 - Push-Benachrichtigungen außerhalb der App (E-Mail/Mobile Push) sind nicht umgesetzt; Benachrichtigungen erscheinen in der App (Glocke, Chat).

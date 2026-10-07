@@ -26,6 +26,7 @@ def openai(monkeypatch):
     monkeypatch.setattr(settings, "openai_api_key", SecretStr(KEY))
     monkeypatch.setattr(settings, "openai_api_key_file", None)
     monkeypatch.setattr(settings, "result_agent_enabled", True)
+    monkeypatch.setattr(settings, "result_agent_provider", "openai_api")
 
     class Fake:
         def __init__(self):

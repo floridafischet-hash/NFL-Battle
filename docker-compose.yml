@@ -23,6 +23,9 @@ x-backend-env: &backend-env
   AGENT_TRUSTED_DOMAINS: ${AGENT_TRUSTED_DOMAINS:-nfl.com,espn.com,cbssports.com,foxsports.com,apnews.com,reuters.com,pro-football-reference.com,sports.yahoo.com,nbcsports.com}
   AGENT_MIN_CONFIRMATIONS: ${AGENT_MIN_CONFIRMATIONS:-2}
   AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF: ${AGENT_RESULT_MIN_MINUTES_AFTER_KICKOFF:-60}
+  RESULT_AGENT_PROVIDER: ${RESULT_AGENT_PROVIDER:-chatgpt}
+  CODEX_HOME: /data/codex
+  CODEX_MODEL: ${CODEX_MODEL:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   OPENAI_API_KEY_FILE: ${OPENAI_API_KEY_FILE:-}
   OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}

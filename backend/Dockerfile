@@ -9,9 +9,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Codex CLI: lets the result agent use a ChatGPT plan (Plus/Pro) instead of an API key
+ARG CODEX_VERSION=0.160.1
+ARG TARGETARCH
+RUN arch="$([ "$TARGETARCH" = "arm64" ] && echo aarch64 || echo x86_64)" \
+    && python -c "import io,sys,tarfile,urllib.request; \
+url=f'https://github.com/openai/codex/releases/download/rust-v{sys.argv[1]}/codex-{sys.argv[2]}-unknown-linux-musl.tar.gz'; \
+t=tarfile.open(fileobj=io.BytesIO(urllib.request.urlopen(url, timeout=300).read())); \
+m=t.getmembers()[0]; f=t.extractfile(m); open('/usr/local/bin/codex','wb').write(f.read())" "$CODEX_VERSION" "$arch" \
+    && chmod 755 /usr/local/bin/codex \
+    && codex --version
+
 RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /data/uploads \
-    && chown -R app:app /data
+    && mkdir -p /data/uploads /data/codex \
+    && chown -R app:app /data \
+    && chmod 700 /data/codex
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app app ./app

@@ -1,30 +1,55 @@
 # ChatGPT-Ergebnis-Agent
 
-Nach jedem Playoff-Spiel sucht **ChatGPT** (OpenAI API mit Websuche) das Endergebnis und trägt es
-ein. Der Agent läuft **im Backend**. Von außen gibt es keinen Zugang mehr (keine Agent-API, keine
-Tokens). Jede Antwort von ChatGPT wird geprüft, mit Quellen gespeichert und protokolliert, bevor sie
-zählt.
+Nach jedem Playoff-Spiel sucht **ChatGPT** mit Live-Websuche das Endergebnis und trägt es ein.
+Der Agent läuft **im Backend**, von außen gibt es keinen Zugang (keine Agent-API, keine Tokens).
+Jede Antwort wird geprüft, mit Quellen gespeichert und protokolliert, bevor sie zählt.
 
-Ohne API-Key ist der Agent aus. Dann trägst du die Ergebnisse unter **Admin → Spiele** ein.
+Es gibt zwei Wege zu ChatGPT (`RESULT_AGENT_PROVIDER`):
+
+| Weg | Was du brauchst | Kosten |
+|---|---|---|
+| `chatgpt` **(Standard)** | ChatGPT **Plus oder Pro**. Die App nutzt die offizielle **Codex CLI** von OpenAI mit „Sign in with ChatGPT“. | im Abo enthalten (Kontingent des Abos) |
+| `openai_api` | OpenAI-API-Key | pro Abfrage (wenige Cent pro Spieltag) |
+
+Ohne Login bzw. Key ist der Agent aus, und du trägst die Ergebnisse unter **Admin → Spiele** ein.
 
 ## 1. Einrichten
 
-1. Auf <https://platform.openai.com/api-keys> einen **API-Key** erstellen. Am besten ein eigenes
-   Projekt nur für das Tippspiel anlegen und dort ein **monatliches Budget-Limit** setzen (z. B. 5 $).
-   Ein ChatGPT-Plus-Abo ist nicht nötig. Die API wird pro Abfrage abgerechnet (bei `gpt-5.4-mini`
-   wenige Cent pro Spieltag).
-2. Den Key **nur auf dem Server** in die `.env` eintragen:
-   ```bash
-   OPENAI_API_KEY=sk-...
-   ```
-   `.env` ist in `.gitignore` und landet nie im Git. Alternativ eine Datei mit dem Key als Docker
-   Secret einbinden und `OPENAI_API_KEY_FILE=/run/secrets/openai_api_key` setzen.
-3. Backend neu starten: `docker compose up -d backend`.
-4. Im Adminbereich unter **ChatGPT** auf **„Verbindung testen“** klicken. Dabei werden Key und
-   Modell geprüft, ohne Kosten.
+### Mit deinem ChatGPT-Abo (empfohlen)
 
-Den Key nie in Chat, Issues oder Screenshots kopieren. Wenn er doch einmal irgendwo gelandet ist:
-im OpenAI-Dashboard löschen, neuen erstellen, in der `.env` ersetzen und das Backend neu starten.
+Ein ChatGPT-Abo hat keine klassische API. Die Codex CLI von OpenAI kann sich aber mit dem Abo
+anmelden und dessen Kontingent nutzen, inklusive Websuche. Sie ist im Backend-Image schon
+installiert.
+
+```bash
+docker compose exec backend codex login --device-auth
+```
+
+1. Die Ausgabe zeigt einen Link und einen Code.
+2. Den Link öffnen, mit dem ChatGPT-Konto (Plus/Pro) anmelden und den Code eingeben.
+3. Prüfen: `docker compose exec backend codex login status` sollte „Logged in using ChatGPT“ melden.
+4. Admin → **ChatGPT** → **„Verbindung testen“**.
+
+Der Login liegt im Daten-Volume unter `/data/codex/auth.json` (nur für den App-Benutzer lesbar).
+Er übersteht Updates, landet im Backup und **nie im Git**. Abmelden geht mit
+`docker compose exec backend codex logout`.
+
+Falls die Geräte-Code-Anmeldung abgelehnt wird, musst du sie in den ChatGPT-Sicherheitseinstellungen
+für Codex erlauben (bei Business/Enterprise macht das der Workspace-Admin). Alternative: Auf dem
+eigenen Rechner `codex login` ausführen und `~/.codex/auth.json` sicher nach `/data/codex/` im
+Backend kopieren (siehe [SETUP_AGENT.md](../SETUP_AGENT.md)).
+
+### Mit API-Key (Alternative)
+
+1. API-Key auf <https://platform.openai.com/api-keys> erstellen. Am besten ein eigenes Projekt mit
+   Budget-Limit anlegen.
+2. **Nur auf dem Server** in die `.env` eintragen: `RESULT_AGENT_PROVIDER=openai_api` und
+   `OPENAI_API_KEY=sk-…`. Alternativ `OPENAI_API_KEY_FILE` für ein Docker Secret.
+3. `docker compose up -d backend` und dann Admin → ChatGPT → „Verbindung testen“.
+
+Keys und Login-Dateien nie in Chats, Issues oder Screenshots kopieren. Wenn so etwas doch irgendwo
+gelandet ist: Bei OpenAI widerrufen (Key löschen bzw. in ChatGPT alle Sitzungen abmelden) und neu
+einrichten.
 
 ## 2. Ablauf
 
@@ -33,7 +58,7 @@ Backend (jede Minute)                                  OpenAI (ChatGPT + Websuch
   │ Welche Spiele brauchen ein Ergebnis?
   │  – Kickoff + RESULT_AGENT_FIRST_CHECK_MINUTES vorbei, noch nicht FINAL
   │  – oder Admin hat „Jetzt prüfen“ geklickt
-  │ POST /v1/responses  ───────────────────────────▶  sucht nur auf AGENT_TRUSTED_DOMAINS
+  │ codex exec / Responses API ────────────────────▶  sucht nur auf AGENT_TRUSTED_DOMAINS
   │                     ◀───────────────────────────  JSON: Status, Spielstand, Quellen + besuchte URLs
   │ Prüfung (siehe unten)
   ├─ ok                         → Spiel FINAL, Punkte, Rangliste, nächste Runde, NFL Bot, Audit-Log
@@ -80,7 +105,9 @@ Das wird auf mehreren Ebenen abgefangen:
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `OPENAI_API_KEY` | – | API-Key (geheim, nur in `.env`) |
+| `RESULT_AGENT_PROVIDER` | `chatgpt` | `chatgpt` (Abo über Codex CLI) oder `openai_api` |
+| `CODEX_MODEL` | leer | Modell für das Abo (leer = Standard der Codex CLI) |
+| `OPENAI_API_KEY` | – | API-Key (geheim, nur in `.env`; nur `openai_api`) |
 | `OPENAI_API_KEY_FILE` | – | alternativ: Datei mit dem Key (Docker Secret) |
 | `OPENAI_MODEL` | `gpt-5.4-mini` | Modell mit Websuche |
 | `OPENAI_REASONING_EFFORT` | `low` | leer lassen bei Modellen ohne Reasoning |
@@ -95,5 +122,7 @@ Das wird auf mehreren Ebenen abgefangen:
 
 ## 6. Datenschutz
 
-An OpenAI gehen nur Spielpaarung, Runde und Kickoff-Zeit, keine Benutzerdaten. Die Anfrage wird mit
-`store: false` gesendet, OpenAI speichert die Antwort also nicht für spätere Abrufe.
+An OpenAI gehen nur Spielpaarung, Runde und Kickoff-Zeit, keine Benutzerdaten. Über die API wird mit
+`store: false` gesendet. Über das Abo läuft jede Suche als kurzlebige Codex-Sitzung (`--ephemeral`)
+mit schreibgeschützter Sandbox. Die Codex CLI bekommt keine Datenbank- oder App-Geheimnisse als
+Umgebungsvariablen.
