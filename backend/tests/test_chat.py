@@ -2,10 +2,16 @@ import io
 import time
 
 from PIL import Image
+from sqlalchemy import func, select
 from starlette.testclient import TestClient
 
+from app.core.config import get_settings
+from app.core.db import get_sessionmaker
 from app.main import app
+from app.models import ChatMessage, SystemMessage
+from app.models.enums import SystemMessageType
 from app.realtime.hub import hub
+from app.services import bot
 from tests.conftest import create_user, login
 
 
@@ -70,6 +76,16 @@ async def test_chat_rate_limit(players, monkeypatch):
     monkeypatch.setattr(get_settings(), "rate_limit_enabled", True)
     codes = [(await players["stefan"].post("/api/chat/messages", {"body": f"spam {i}"})).status_code for i in range(22)]
     assert codes.count(201) == 20 and codes[-1] == 429
+
+
+async def test_chat_bot_can_be_disabled(monkeypatch):
+    monkeypatch.setattr(get_settings(), "chat_bot_enabled", False)
+    async with get_sessionmaker()() as session:
+        assert await bot.post(session, SystemMessageType.INFO, "Automatische Nachricht") is None
+        await session.commit()
+        chat_count = (await session.execute(select(func.count(ChatMessage.id)))).scalar_one()
+        system_count = (await session.execute(select(func.count(SystemMessage.id)))).scalar_one()
+    assert chat_count == 0 and system_count == 0
 
 
 async def test_websocket_receives_chat_live():

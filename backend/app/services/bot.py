@@ -76,6 +76,8 @@ async def post(
     dedupe_key: str | None = None,
 ) -> ChatMessage | None:
     """Create a system message + chat entry. Returns None if the dedupe key was already used."""
+    if not get_settings().chat_bot_enabled:
+        return None
     if dedupe_key is not None:
         exists = (
             await session.execute(select(SystemMessage.id).where(SystemMessage.dedupe_key == dedupe_key))

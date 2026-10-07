@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     scheduler_interval_seconds: int = 30
     reminder_hours_before_lock: int = 24
+    chat_bot_enabled: bool = True
 
     rate_limit_enabled: bool = True
     seed_demo_data: bool = False
