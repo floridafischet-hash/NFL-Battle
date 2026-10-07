@@ -70,9 +70,21 @@ class UserCreateIn(BaseModel):
 
 
 class UserUpdateIn(BaseModel):
+    username: str | None = Field(default=None, min_length=2, max_length=32)
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     role: Literal["USER", "ADMIN"] | None = None
     is_active: bool | None = None
+    password: str | None = Field(default=None, min_length=6, max_length=200)
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if not USERNAME_RE.match(v):
+            raise ValueError("2–32 Zeichen: a–z, 0–9, Punkt, Minus, Unterstrich")
+        return v
 
     @field_validator("display_name")
     @classmethod
@@ -145,18 +157,46 @@ async def update_user(
     user_id: uuid.UUID, body: UserUpdateIn, admin: CurrentSuperuser, session: DBSession
 ) -> dict[str, Any]:
     user = await _user(session, user_id)
-    old = {"display_name": user.display_name, "role": user.role.value, "is_active": user.is_active}
+    old = {
+        "username": user.username,
+        "display_name": user.display_name,
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
     if user.is_superuser and (body.role == "USER" or body.is_active is False):
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Der Inhaber der Instanz kann nicht gesperrt oder herabgestuft werden."
         )
+    if user.is_superuser and body.username is not None and body.username != user.username:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Der Benutzername des Inhabers ist in der Serverkonfiguration festgelegt."
+        )
+    invalidate_tokens = False
+    if body.username is not None and body.username != user.username:
+        user.username = body.username
+        invalidate_tokens = True
     if body.display_name is not None:
         user.display_name = body.display_name.strip()
     if body.role is not None:
         user.role = Role(body.role)
     if body.is_active is not None:
         user.is_active = body.is_active
-    new = {"display_name": user.display_name, "role": user.role.value, "is_active": user.is_active}
+    if body.password is not None:
+        user.password_hash = await asyncio.to_thread(hash_password, body.password)
+        invalidate_tokens = True
+    if invalidate_tokens:
+        user.token_version += 1
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Benutzername ist bereits vergeben.")
+    new = {
+        "username": user.username,
+        "display_name": user.display_name,
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
     if old != new:
         action = "USER_UPDATED"
         if old["is_active"] != new["is_active"]:
@@ -169,10 +209,10 @@ async def update_user(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: uuid.UUID, admin: CurrentAdmin, session: DBSession) -> None:
+async def delete_user(user_id: uuid.UUID, admin: CurrentSuperuser, session: DBSession) -> None:
     user = await _user(session, user_id)
-    if user.id == admin.user_id:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Du kannst deinen eigenen Adminzugang nicht löschen.")
+    if user.is_superuser:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Der Inhaber der Instanz kann nicht gelöscht werden.")
     old = {"username": user.username, "display_name": user.display_name, "role": user.role.value}
     audit(session, admin, "USER_DELETED", "user", user.id, old, None, source="ADMIN")
     await session.delete(user)

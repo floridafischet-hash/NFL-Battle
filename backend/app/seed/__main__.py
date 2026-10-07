@@ -100,6 +100,9 @@ async def ensure_admin(session) -> User | None:
     username = settings.admin_username.strip().lower()
     admin = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if admin is not None:
+        await session.execute(
+            update(User).where(User.is_superuser.is_(True), User.id != admin.id).values(is_superuser=False)
+        )
         if not admin.is_superuser or admin.role != Role.ADMIN or not admin.is_active:
             admin.is_superuser = True  # the instance owner (ADMIN_USERNAME) always manages the users
             admin.role = Role.ADMIN

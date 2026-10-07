@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { KeyRound, ListChecks, Trash2, UserPlus } from "lucide-react";
+import { ListChecks, Pencil, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
@@ -137,14 +137,77 @@ function PredictionsModal({ user, onClose }: { user: AdminUser | null; onClose: 
   );
 }
 
+function EditUserModal({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [form, setForm] = useState({
+    username: user.username,
+    display_name: user.display_name,
+    role: user.role,
+    is_active: user.is_active,
+    password: "",
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      patch(`/api/admin/users/${user.id}`, {
+        username: form.username,
+        display_name: form.display_name,
+        role: form.role,
+        is_active: form.is_active,
+        ...(form.password ? { password: form.password } : {}),
+      }),
+    onSuccess: () => {
+      toast.success("Benutzer gespeichert", form.password ? "Die bisherigen Anmeldungen wurden beendet." : undefined);
+      onDone();
+      onClose();
+    },
+    onError: (e) => toast.error("Speichern fehlgeschlagen", errorText(e)),
+  });
+  return (
+    <Modal open onClose={onClose} title={`${user.display_name} bearbeiten`}>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <Input
+          label="Benutzername (Login)"
+          value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+          disabled={!!user.is_superuser}
+          required
+          minLength={2}
+          maxLength={32}
+          pattern="[A-Za-z0-9._\-]+"
+          autoComplete="off"
+        />
+        <Input label="Anzeigename" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} required maxLength={80} />
+        <Select label="Rolle" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as "USER" | "ADMIN" })} disabled={!!user.is_superuser}>
+          <option value="USER">Spieler</option>
+          <option value="ADMIN">Admin</option>
+        </Select>
+        <Select label="Status" value={form.is_active ? "active" : "blocked"} onChange={(e) => setForm({ ...form, is_active: e.target.value === "active" })} disabled={!!user.is_superuser}>
+          <option value="active">Aktiv</option>
+          <option value="blocked">Gesperrt</option>
+        </Select>
+        <Input label="Neues Passwort (optional)" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={6} autoComplete="off" />
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" onClick={onClose}>Abbrechen</Button>
+          <Button type="submit" variant="primary" loading={save.isPending}>Speichern</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function UsersAdmin() {
   const me = useMe();
   const owner = !!me.is_superuser; // only the instance owner manages users
   const toast = useToast();
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => get<AdminUser[]>("/api/admin/users") });
   const [creating, setCreating] = useState(false);
-  const [resetUser, setResetUser] = useState<AdminUser | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [tipsUser, setTipsUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
 
@@ -155,15 +218,6 @@ export function UsersAdmin() {
       toast.success("Benutzer aktualisiert");
     },
     onError: (e) => toast.error("Änderung fehlgeschlagen", errorText(e)),
-  });
-  const reset = useMutation({
-    mutationFn: () => post(`/api/admin/users/${resetUser!.id}/password`, { password: newPassword }),
-    onSuccess: () => {
-      toast.success("Passwort zurückgesetzt", "Der Benutzer wurde auf allen Geräten abgemeldet.");
-      setResetUser(null);
-      setNewPassword("");
-    },
-    onError: (e) => toast.error("Zurücksetzen fehlgeschlagen", errorText(e)),
   });
   const remove = useMutation({
     mutationFn: () => del(`/api/admin/users/${deleteUser!.id}`),
@@ -235,8 +289,8 @@ export function UsersAdmin() {
                         <ListChecks className="size-4" /> Tipps
                       </Button>
                       {owner && (
-                        <Button size="sm" variant="ghost" onClick={() => setResetUser(u)} title="Passwort zurücksetzen">
-                          <KeyRound className="size-4" /> Passwort
+                        <Button size="sm" variant="ghost" onClick={() => setEditUser(u)} title="Benutzer bearbeiten">
+                          <Pencil className="size-4" /> Bearbeiten
                         </Button>
                       )}
                       {owner && u.id !== me.id && !u.is_superuser &&
@@ -249,7 +303,7 @@ export function UsersAdmin() {
                             Aktivieren
                           </Button>
                         ))}
-                      {u.id !== me.id && (
+                      {owner && u.id !== me.id && !u.is_superuser && (
                         <Button size="sm" variant="danger" onClick={() => setDeleteUser(u)} title="Benutzer dauerhaft löschen">
                           <Trash2 className="size-4" /> Löschen
                         </Button>
@@ -263,25 +317,7 @@ export function UsersAdmin() {
         </div>
       )}
       <CreateUserModal open={creating} onClose={() => setCreating(false)} onDone={() => users.refetch()} />
-      <Modal open={!!resetUser} onClose={() => setResetUser(null)} title={`Passwort für ${resetUser?.display_name ?? ""}`}>
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            reset.mutate();
-          }}
-        >
-          <Input label="Neues Passwort (min. 6 Zeichen)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={6} required autoComplete="off" />
-          <div className="flex justify-end gap-2">
-            <Button type="button" onClick={() => setResetUser(null)}>
-              Abbrechen
-            </Button>
-            <Button type="submit" variant="primary" loading={reset.isPending}>
-              Setzen
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {editUser && <EditUserModal key={editUser.id} user={editUser} onClose={() => setEditUser(null)} onDone={() => users.refetch()} />}
       <Modal open={!!deleteUser} onClose={() => setDeleteUser(null)} title={`Benutzer ${deleteUser?.display_name ?? ""} löschen?`}>
         <div className="space-y-4">
           <p className="text-sm text-slate-300">

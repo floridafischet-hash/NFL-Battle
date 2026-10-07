@@ -1,3 +1,6 @@
+from app.core.config import get_settings
+from app.core.db import get_sessionmaker
+from app.seed.__main__ import ensure_admin
 from tests.conftest import create_user, login
 
 
@@ -14,6 +17,7 @@ async def test_only_the_instance_owner_manages_users(admin, players):
     florian = next(u for u in users if u["username"] == "florian")
     assert (await co.patch(f"/api/admin/users/{florian['id']}", {"role": "ADMIN"})).status_code == 403
     assert (await co.post(f"/api/admin/users/{florian['id']}/password", {"password": "hacked123"})).status_code == 403
+    assert (await co.delete(f"/api/admin/users/{florian['id']}")).status_code == 403
     assert (await co.post("/api/admin/seasons", {"name": "2031/2032", "year": 2031})).status_code == 201
     # the owner can, and cannot be blocked or demoted
     assert (await admin.post("/api/admin/users", body)).status_code == 201
@@ -21,3 +25,13 @@ async def test_only_the_instance_owner_manages_users(admin, players):
     assert owner["is_superuser"] is True
     assert (await admin.patch(f"/api/admin/users/{owner['id']}", {"is_active": False})).status_code == 409
     assert (await admin.patch(f"/api/admin/users/{owner['id']}", {"role": "USER"})).status_code == 409
+
+
+async def test_configured_admin_username_transfers_instance_ownership(admin, players, monkeypatch):
+    monkeypatch.setattr(get_settings(), "admin_username", "florian")
+    async with get_sessionmaker()() as session:
+        owner = await ensure_admin(session)
+        await session.commit()
+    assert owner is not None and owner.username == "florian" and owner.is_superuser
+    assert (await players["florian"].get("/api/me")).json()["is_superuser"] is True
+    assert (await admin.get("/api/me")).json()["is_superuser"] is False

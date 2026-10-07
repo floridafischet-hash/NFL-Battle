@@ -67,6 +67,39 @@ async def test_admin_creates_user_and_resets_password(admin):
     await login("marcel", "reset456")
 
 
+async def test_owner_edits_user_login_profile_role_status_and_password(admin):
+    await create_user("kevin")
+    old_login = await login("kevin")
+    users = (await admin.get("/api/admin/users")).json()
+    kevin_id = next(u["id"] for u in users if u["username"] == "kevin")
+
+    r = await admin.patch(
+        f"/api/admin/users/{kevin_id}",
+        {
+            "username": "king-kevin",
+            "display_name": "King Kevin",
+            "role": "ADMIN",
+            "is_active": True,
+            "password": "freshpass123",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["username"] == "king-kevin"
+    assert r.json()["display_name"] == "King Kevin"
+    assert r.json()["role"] == "ADMIN"
+    assert (await old_login.get("/api/me")).status_code == 401
+    await login("king-kevin", "freshpass123")
+
+
+async def test_owner_cannot_assign_duplicate_username(admin):
+    await create_user("kevin")
+    await create_user("lisa")
+    users = (await admin.get("/api/admin/users")).json()
+    kevin_id = next(u["id"] for u in users if u["username"] == "kevin")
+    r = await admin.patch(f"/api/admin/users/{kevin_id}", {"username": "lisa"})
+    assert r.status_code == 409
+
+
 async def test_role_change_takes_effect(admin):
     await create_user("tobi")
     tobi = await login("tobi")
