@@ -24,6 +24,7 @@ interface AdminUser {
   avatar_url: string | null;
   role: "USER" | "ADMIN";
   is_active: boolean;
+  is_superuser?: boolean;
   created_at: string;
   last_login_at: string | null;
   last_seen_at: string | null;
@@ -138,6 +139,7 @@ function PredictionsModal({ user, onClose }: { user: AdminUser | null; onClose: 
 
 export function UsersAdmin() {
   const me = useMe();
+  const owner = !!me.is_superuser; // only the instance owner manages users
   const toast = useToast();
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => get<AdminUser[]>("/api/admin/users") });
   const [creating, setCreating] = useState(false);
@@ -167,9 +169,13 @@ export function UsersAdmin() {
     <Card
       title="Benutzer"
       action={
-        <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
-          <UserPlus className="size-4" /> Benutzer anlegen
-        </Button>
+        owner ? (
+          <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
+            <UserPlus className="size-4" /> Benutzer anlegen
+          </Button>
+        ) : (
+          <span className="text-xs text-slate-400">Benutzer verwaltet nur der Inhaber der Instanz.</span>
+        )
       }
       bodyClassName="p-0"
     >
@@ -202,7 +208,7 @@ export function UsersAdmin() {
                   <td className="px-3 py-3">
                     <Select
                       value={u.role}
-                      disabled={u.id === me.id}
+                      disabled={!owner || u.id === me.id || !!u.is_superuser}
                       onChange={(e) => update.mutate({ id: u.id, body: { role: e.target.value } })}
                       className="min-h-9 w-32 py-1"
                       aria-label={`Rolle von ${u.display_name}`}
@@ -218,10 +224,12 @@ export function UsersAdmin() {
                       <Button size="sm" variant="ghost" onClick={() => setTipsUser(u)} title="Tipps ansehen">
                         <ListChecks className="size-4" /> Tipps
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setResetUser(u)} title="Passwort zurücksetzen">
-                        <KeyRound className="size-4" /> Passwort
-                      </Button>
-                      {u.id !== me.id &&
+                      {owner && (
+                        <Button size="sm" variant="ghost" onClick={() => setResetUser(u)} title="Passwort zurücksetzen">
+                          <KeyRound className="size-4" /> Passwort
+                        </Button>
+                      )}
+                      {owner && u.id !== me.id && !u.is_superuser &&
                         (u.is_active ? (
                           <Button size="sm" variant="danger" onClick={() => update.mutate({ id: u.id, body: { is_active: false } })}>
                             Sperren

@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
-from app.core.security import CurrentAdmin, DBSession, hash_password
+from app.core.security import CurrentAdmin, CurrentSuperuser, DBSession, hash_password
 from app.core.text import clean_display_name
 from app.models import (
     AgentRun,
@@ -92,6 +92,7 @@ def user_admin_out(u: User) -> dict[str, Any]:
         "avatar_url": u.avatar_url,
         "role": u.role.value,
         "is_active": u.is_active,
+        "is_superuser": u.is_superuser,
         "created_at": u.created_at,
         "last_login_at": u.last_login_at,
         "last_seen_at": u.last_seen_at,
@@ -112,7 +113,7 @@ async def list_users(admin: CurrentAdmin, session: DBSession) -> list[dict[str, 
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
-async def create_user(body: UserCreateIn, admin: CurrentAdmin, session: DBSession) -> dict[str, Any]:
+async def create_user(body: UserCreateIn, admin: CurrentSuperuser, session: DBSession) -> dict[str, Any]:
     user = User(
         username=body.username,
         display_name=body.display_name.strip(),
@@ -141,13 +142,13 @@ async def create_user(body: UserCreateIn, admin: CurrentAdmin, session: DBSessio
 
 @router.patch("/users/{user_id}")
 async def update_user(
-    user_id: uuid.UUID, body: UserUpdateIn, admin: CurrentAdmin, session: DBSession
+    user_id: uuid.UUID, body: UserUpdateIn, admin: CurrentSuperuser, session: DBSession
 ) -> dict[str, Any]:
     user = await _user(session, user_id)
     old = {"display_name": user.display_name, "role": user.role.value, "is_active": user.is_active}
-    if user.id == admin.user_id and (body.role == "USER" or body.is_active is False):
+    if user.is_superuser and (body.role == "USER" or body.is_active is False):
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Du kannst dir selbst nicht die Adminrechte entziehen oder dich sperren."
+            status.HTTP_409_CONFLICT, "Der Inhaber der Instanz kann nicht gesperrt oder herabgestuft werden."
         )
     if body.display_name is not None:
         user.display_name = body.display_name.strip()
@@ -168,7 +169,9 @@ async def update_user(
 
 
 @router.post("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
-async def reset_password(user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentAdmin, session: DBSession) -> None:
+async def reset_password(
+    user_id: uuid.UUID, body: PasswordResetIn, admin: CurrentSuperuser, session: DBSession
+) -> None:
     user = await _user(session, user_id)
     user.password_hash = await asyncio.to_thread(hash_password, body.password)
     user.token_version += 1

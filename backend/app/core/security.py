@@ -210,5 +210,14 @@ async def require_admin(principal: Annotated[Principal, Depends(require_user)]) 
 
 
 CurrentUser = Annotated[Principal, Depends(require_user)]
+
+
+async def require_superuser(principal: Annotated[Principal, Depends(require_admin)]) -> Principal:
+    if principal.user is None or not principal.user.is_superuser:
+        raise AuthError("Nur der Inhaber dieser Instanz darf Benutzer verwalten", status.HTTP_403_FORBIDDEN)
+    return principal
+
+
 CurrentAdmin = Annotated[Principal, Depends(require_admin)]
+CurrentSuperuser = Annotated[Principal, Depends(require_superuser)]
 DBSession = Annotated[AsyncSession, Depends(get_session)]

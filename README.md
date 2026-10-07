@@ -58,7 +58,6 @@ Der erste Start dauert ein paar Minuten, weil die Images gebaut werden.
 ```bash
 docker compose logs migrate
 # Initialer Admin: Benutzername 'admin', Passwort '…'
-# Demo-Benutzer: florian: …   dennis: …   (jeder hat sein eigenes Passwort)
 ```
 
 `docker compose ps` sollte überall `healthy` zeigen. `migrate` steht danach auf `exited (0)`,
@@ -122,6 +121,9 @@ Punktesystem geändert? **Saisons → „Punkte neu berechnen“**.
 
 - **Admin → Benutzer → „Benutzer anlegen“**: Name, Passwort und Rolle (Spieler oder Admin). Kein
   Keycloak, kein Schnickschnack.
+- **Nur du als Inhaber** (der Admin aus `ADMIN_USERNAME`, der die Instanz aufsetzt) darfst Benutzer
+  anlegen, Passwörter zurücksetzen, Rollen ändern und sperren. Weitere Admins können Saisons, Spiele
+  und Ergebnisse verwalten, aber keine Benutzer.
 - Jeder kann im **Profil** Namen, Avatar und Passwort ändern.
 - Ausgesperrt? `docker compose exec backend python -m app.cli set-password admin NeuesPasswort`
   (außerdem gibt's `create-admin` und `list-users`).
@@ -137,7 +139,7 @@ Die wichtigsten Variablen. Alle anderen sind in [.env.example](.env.example) kom
 | `PUBLIC_URL` | `http://localhost:8080` | Adresse der App |
 | `HTTP_PORT` | `8080` | Port, falls 8080 schon belegt ist |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / zufällig | erster Admin |
-| `SEED_DEMO_DATA` | `true` | Demo-Saisons und Demo-Spieler zum Rumprobieren |
+| `SEED_DEMO_DATA` | `false` | `true` = Demo-Saisons, Demo-Spieler und Chat zum Rumprobieren. Standard: leere Instanz |
 | `RESULT_AGENT_PROVIDER` | `chatgpt` | `chatgpt` = dein Abo (Codex-Login), `openai_api` = API-Key |
 | `CODEX_MODEL` | leer | optional: bestimmtes Modell für dein Abo |
 | `OPENAI_API_KEY` | leer | nur für `openai_api`, **geheim** |

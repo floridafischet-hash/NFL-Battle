@@ -24,6 +24,7 @@ export interface Me {
   avatar_url: string | null;
   role: "USER" | "ADMIN";
   is_admin: boolean;
+  is_superuser?: boolean;
 }
 
 export interface UserRef {

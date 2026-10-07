@@ -21,6 +21,8 @@ class User(TimestampMixin, Base):
     role: Mapped[Role] = mapped_column(str_enum(Role, "user_role"), default=Role.USER, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     is_bot: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # the account that set up the instance (ADMIN_USERNAME): only it may create/manage users
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
