@@ -40,7 +40,9 @@ interface Report {
 interface AgentConfig {
   enabled: boolean;
   configured: boolean;
+  provider: "chatgpt" | "openai_api";
   has_key: boolean;
+  chatgpt_login: boolean;
   model: string;
   trusted_domains: string[];
   min_confirmations: number;
@@ -116,14 +118,22 @@ export function AgentAdmin() {
         >
           <div className="space-y-2 text-sm" data-testid="agent-config">
             <p className="flex flex-wrap items-center gap-2">
-              {c.configured ? <Badge tone="green">aktiv</Badge> : <Badge tone="red">{c.enabled ? "kein API-Key" : "deaktiviert"}</Badge>}
-              <span className="text-slate-300">Modell <code className="text-gold">{c.model}</code></span>
+              {c.configured ? (
+                <Badge tone="green">aktiv</Badge>
+              ) : (
+                <Badge tone="red">{!c.enabled ? "deaktiviert" : c.provider === "chatgpt" ? "nicht angemeldet" : "kein API-Key"}</Badge>
+              )}
+              <span className="text-slate-300">
+                {c.provider === "chatgpt" ? "über dein ChatGPT-Abo" : "über die OpenAI API"} · <code className="text-gold">{c.model}</code>
+              </span>
             </p>
             {!c.configured && (
               <p className="text-amber-100">
-                {c.enabled
-                  ? "OPENAI_API_KEY in der .env auf dem Server eintragen und das Backend neu starten (docs/CHATGPT.md). Bis dahin trägst du Ergebnisse unter „Spiele“ ein."
-                  : "RESULT_AGENT_ENABLED=false – Ergebnisse werden unter „Spiele“ eingetragen."}
+                {!c.enabled
+                  ? "RESULT_AGENT_ENABLED=false – Ergebnisse werden unter „Spiele“ eingetragen."
+                  : c.provider === "chatgpt"
+                    ? "Einmal auf dem Server mit deinem ChatGPT-Konto anmelden: docker compose exec backend codex login --device-auth (docs/CHATGPT.md). Bis dahin trägst du Ergebnisse unter „Spiele“ ein."
+                    : "OPENAI_API_KEY in der .env auf dem Server eintragen und das Backend neu starten (docs/CHATGPT.md). Bis dahin trägst du Ergebnisse unter „Spiele“ ein."}
               </p>
             )}
             <p className="text-slate-400">

@@ -385,6 +385,14 @@ async def _process_valid_result(
     domains.update(domain_of(s.source_url) for s in data.sources if is_trusted(s.source_url))
     domains.update(domain_of(r.source_url) for r in open_reports if is_trusted(r.source_url))
     domains.discard(None)
+    runs = 1 + sum(1 for r in open_reports if (r.home_score, r.away_score) == (home, away))
+    if principal.kind == "agent" and runs < settings.result_agent_confirm_runs:
+        return await finish(
+            AgentRunStatus.PENDING_CONFIRMATION,
+            ReportStatus.PENDING_CONFIRMATION,
+            f"Warte auf eine weitere unabhängige Suche ({runs}/{settings.result_agent_confirm_runs}).",
+            202,
+        )
     if len(domains) < settings.agent_min_confirmations:
         return await finish(
             AgentRunStatus.PENDING_CONFIRMATION,

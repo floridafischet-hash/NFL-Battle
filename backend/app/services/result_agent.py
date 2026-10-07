@@ -1,7 +1,13 @@
 """ChatGPT result agent.
 
-Researches the final score of finished playoff games with the OpenAI Responses API (web search,
-restricted to the trusted sports sites from AGENT_TRUSTED_DOMAINS) and feeds the answer into the
+Researches the final score of finished playoff games with ChatGPT and live web search (restricted
+to the trusted sports sites from AGENT_TRUSTED_DOMAINS). Two ways to reach ChatGPT:
+
+* ``chatgpt`` (default): the official Codex CLI signed in with a ChatGPT plan (Plus/Pro) – no API
+  key; ``codex exec`` runs non-interactively with a JSON output schema.
+* ``openai_api``: the OpenAI Responses API with OPENAI_API_KEY.
+
+The answer is fed into the
 validation pipeline in app.services.agent – the same checks, review workflow and audit trail as
 before, but without any external access to the app.
 
@@ -22,14 +28,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +59,27 @@ ADVISORY_LOCK_ID = 73_102_028
 KIND_RESEARCH = "RESEARCH"
 MAX_OUTPUT_TOKENS = 8000
 MAX_TOOL_CALLS = 8
+LOGIN_HINT = "docker compose exec backend codex login --device-auth"
+# Codex may only search the web: no shell, no file/browser/computer tools, no plugins. A web page that
+# tries to instruct the model therefore cannot read files (e.g. the login or the app's secret key).
+CODEX_DISABLED_FEATURES = (
+    "shell_tool",
+    "unified_exec",
+    "shell_snapshot",
+    "apps",
+    "plugins",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "computer_use",
+    "code_mode_host",
+    "in_app_browser",
+    "multi_agent",
+    "image_generation",
+    "view_image",
+    "hooks",
+    "skill_mcp_dependency_install",
+)
 
 INSTRUCTIONS = """You verify NFL playoff results for a private tipping game.
 Use the web search to find the FINAL score of exactly the game described by the user.
@@ -110,6 +141,12 @@ class Answer(BaseModel):
     sources: list[AnswerSource] = Field(default_factory=list, max_length=10)
     note: str = Field(default="", max_length=1000)
 
+    @field_validator("note")
+    @classmethod
+    def _short_note(cls, v: str) -> str:
+        # free text from the model is only shown to the admin – keep it short and token-free
+        return re.sub(r"[A-Za-z0-9_\-+/=.]{32,}", "[…]", v)[:200]
+
 
 class ResearchError(Exception):
     """The OpenAI call failed or returned something unusable."""
@@ -138,13 +175,29 @@ def redact(value: str) -> str:
     return _KEYLIKE.sub("sk-***", value)
 
 
+def codex_logged_in() -> bool:
+    settings = get_settings()
+    return shutil.which(settings.codex_bin) is not None and (Path(settings.codex_home) / "auth.json").is_file()
+
+
 def is_configured() -> bool:
     settings = get_settings()
-    return settings.result_agent_enabled and bool(settings.openai_key())
+    if not settings.result_agent_enabled:
+        return False
+    if settings.result_agent_provider == "chatgpt":
+        return codex_logged_in()
+    return bool(settings.openai_key())
+
+
+def model_label() -> str:
+    settings = get_settings()
+    if settings.result_agent_provider == "chatgpt":
+        return f"ChatGPT-Abo{' · ' + settings.codex_model if settings.codex_model else ''}"
+    return settings.openai_model
 
 
 def agent_principal() -> Principal:
-    return Principal("agent", f"ChatGPT ({get_settings().openai_model})"[:120])
+    return Principal("agent", f"ChatGPT ({model_label()})"[:120])
 
 
 _TRACKING = ("utm_", "fbclid", "gclid", "ref", "src")
@@ -259,9 +312,107 @@ def parse_response(data: dict[str, Any]) -> Research:
     return Research(answer, grounded, data.get("usage") or {}, searches)
 
 
-async def research(match: Match, client: httpx.AsyncClient) -> Research:
-    """One OpenAI call for one match. Raises ResearchError on any failure."""
+def _collect_urls(value: Any, out: set[str]) -> None:
+    """All URLs anywhere inside a (nested) JSON value."""
+    if isinstance(value, dict):
+        for v in value.values():
+            _collect_urls(v, out)
+    elif isinstance(value, list):
+        for v in value:
+            _collect_urls(v, out)
+    elif isinstance(value, str) and value.startswith(("http://", "https://")) and (norm := normalize_url(value)):
+        out.add(norm)
+
+
+def _codex_env() -> dict[str, str]:
     settings = get_settings()
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("OPENAI_", "DATABASE_", "SECRET_", "ADMIN_"))}
+    env["CODEX_HOME"] = settings.codex_home
+    return env
+
+
+async def research_codex(match: Match) -> Research:
+    """One `codex exec` run with the ChatGPT plan login (no API key)."""
+    settings = get_settings()
+    if not codex_logged_in():
+        raise ResearchError(f"Nicht bei ChatGPT angemeldet: {LOGIN_HINT}")
+    request = build_request(match)
+    domains = json.dumps(settings.trusted_domains[:100])
+    with tempfile.TemporaryDirectory(prefix="nbb-codex-") as tmp:
+        schema = Path(tmp) / "schema.json"
+        schema.write_text(json.dumps(RESULT_SCHEMA))
+        answer_file = Path(tmp) / "answer.json"
+        args = [
+            settings.codex_bin,
+            "exec",
+            "--json",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "-c",
+            'web_search="live"',
+            *[arg for feature in CODEX_DISABLED_FEATURES for arg in ("-c", f"features.{feature}=false")],
+            "-c",
+            f"tools.web_search.allowed_domains={domains}",
+            "--output-schema",
+            str(schema),
+            "--output-last-message",
+            str(answer_file),
+        ]
+        if settings.codex_model:
+            args += ["--model", settings.codex_model]
+        args.append(f"{request['instructions']}\n\n{request['input']}")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                cwd=tmp,
+                env=_codex_env(),
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise ResearchError(f"Codex CLI nicht startbar: {exc.__class__.__name__}") from None
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=settings.codex_timeout_seconds)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise ResearchError("Zeitüberschreitung bei ChatGPT (codex exec)") from None
+        if proc.returncode != 0:
+            tail = stderr.decode("utf-8", "replace").strip().splitlines()[-3:]
+            raise ResearchError(redact(f"codex exec fehlgeschlagen ({proc.returncode}): {' | '.join(tail)[:400]}"))
+        grounded: set[str] = set()
+        searches = 0
+        usage: dict[str, Any] = {}
+        for line in stdout.decode("utf-8", "replace").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            item = event.get("item") or {}
+            if item.get("type") == "web_search" and event.get("type") == "item.completed":
+                searches += 1
+                _collect_urls(item, grounded)
+            if event.get("type") == "turn.completed":
+                usage = event.get("usage") or {}
+        raw = answer_file.read_text() if answer_file.is_file() else ""
+    message = {"type": "message", "content": [{"type": "output_text", "text": raw, "annotations": []}]}
+    result = parse_response({"status": "completed", "output": [message]})
+    result.grounded_urls |= grounded
+    result.searches = searches
+    result.usage = usage
+    return result
+
+
+async def research(match: Match, client: httpx.AsyncClient) -> Research:
+    """One ChatGPT call for one match. Raises ResearchError on any failure."""
+    settings = get_settings()
+    if settings.result_agent_provider == "chatgpt":
+        return await research_codex(match)
     key = settings.openai_key()
     if not key:
         raise ResearchError("Kein OpenAI-API-Key konfiguriert")
@@ -282,9 +433,37 @@ async def research(match: Match, client: httpx.AsyncClient) -> Research:
     return parse_response(data)
 
 
-async def test_connection(client: httpx.AsyncClient | None = None) -> dict[str, Any]:
-    """Admin 'Verbindung testen': checks key and model with a free metadata request."""
+async def test_codex_login() -> dict[str, Any]:
     settings = get_settings()
+    if shutil.which(settings.codex_bin) is None:
+        return {"ok": False, "message": "Codex CLI ist im Backend nicht installiert."}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            settings.codex_bin,
+            "login",
+            "status",
+            env=_codex_env(),
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except (OSError, TimeoutError):
+        return {"ok": False, "message": "Codex CLI antwortet nicht."}
+    text = redact(out.decode("utf-8", "replace").strip())[:300]
+    if proc.returncode == 0 and codex_logged_in():
+        return {"ok": True, "message": f"Mit ChatGPT angemeldet – {text}"}
+    return {
+        "ok": False,
+        "message": f"Nicht bei ChatGPT angemeldet. Auf dem Server: {LOGIN_HINT}",
+    }
+
+
+async def test_connection(client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+    """Admin 'Verbindung testen': ChatGPT login status, or key + model with a free metadata request."""
+    settings = get_settings()
+    if settings.result_agent_provider == "chatgpt":
+        return await test_codex_login()
     key = settings.openai_key()
     if not key:
         return {"ok": False, "message": "Kein OpenAI-API-Key konfiguriert (OPENAI_API_KEY in der .env)."}
@@ -421,14 +600,14 @@ async def handle_match(match_id: int, client: httpx.AsyncClient) -> dict[str, An
         force_review: str | None = None
         if research_result is None:
             run.message = error
-            run.request_payload = {"model": get_settings().openai_model}
+            run.request_payload = {"model": model_label()}
             outcome["status"] = "ERROR"
         else:
             answer = research_result.answer
             grounded = [s for s in answer.sources if normalize_url(s.url) in research_result.grounded_urls]
             dropped = [s.url for s in answer.sources if s not in grounded]
             run.request_payload = {
-                "model": get_settings().openai_model,
+                "model": model_label(),
                 "answer": answer.model_dump(),
                 "grounded_sources": [s.url for s in grounded],
                 "dropped_sources": dropped,
@@ -508,8 +687,8 @@ async def result_agent_loop(stop: asyncio.Event) -> None:
     settings = get_settings()
     if not settings.result_agent_enabled:
         return
-    if not settings.openai_key():
-        log.info("result agent: no OPENAI_API_KEY configured – results are entered by the admin")
+    if not is_configured():
+        log.info("result agent (%s) not set up yet – results are entered by the admin", settings.result_agent_provider)
     while not stop.is_set():
         try:
             await run_once()

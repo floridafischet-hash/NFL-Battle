@@ -9,9 +9,28 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Codex CLI: lets the result agent use a ChatGPT plan (Plus/Pro) instead of an API key.
+# Pinned version, verified by SHA-256 before it is installed.
+ARG CODEX_VERSION=0.160.1
+ARG CODEX_SHA256_X86_64=9226581be592d18f7e7f740a352fdb63aa61e45e39f7eb9b09d3888c84bba33f
+ARG CODEX_SHA256_AARCH64=f54dc5852042445bf41da3aa31156f3cb02f52c5a1a04074de73dc5598f7e1f7
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "arm64" ]; then arch=aarch64; sum="$CODEX_SHA256_AARCH64"; \
+    else arch=x86_64; sum="$CODEX_SHA256_X86_64"; fi \
+    && python -c "import hashlib,io,sys,tarfile,urllib.request; \
+v,a,want=sys.argv[1:4]; name=f'codex-{a}-unknown-linux-musl'; \
+data=urllib.request.urlopen(f'https://github.com/openai/codex/releases/download/rust-v{v}/{name}.tar.gz', timeout=300).read(); \
+got=hashlib.sha256(data).hexdigest(); \
+sys.exit(f'codex checksum mismatch: {got}') if got != want else None; \
+f=tarfile.open(fileobj=io.BytesIO(data)).extractfile(name); \
+open('/usr/local/bin/codex','wb').write(f.read())" "$CODEX_VERSION" "$arch" "$sum" \
+    && chmod 755 /usr/local/bin/codex \
+    && codex --version
+
 RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /data/uploads \
-    && chown -R app:app /data
+    && mkdir -p /data/uploads /data/codex \
+    && chown -R app:app /data \
+    && chmod 700 /data/codex
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app app ./app

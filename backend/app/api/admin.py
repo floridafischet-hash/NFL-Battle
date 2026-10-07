@@ -543,8 +543,10 @@ async def agent_config(session: DBSession) -> dict[str, Any]:
     return {
         "enabled": settings.result_agent_enabled,
         "configured": result_agent.is_configured(),
+        "provider": settings.result_agent_provider,
         "has_key": bool(settings.openai_key()),
-        "model": settings.openai_model,
+        "chatgpt_login": result_agent.codex_logged_in(),
+        "model": result_agent.model_label(),
         "trusted_domains": settings.trusted_domains,
         "min_confirmations": settings.agent_min_confirmations,
         "first_check_minutes": settings.result_agent_first_check_minutes,

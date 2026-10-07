@@ -42,7 +42,16 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
     max_upload_mb: int = 5
 
-    # ChatGPT result agent (OpenAI API). The key is a secret: set it only in .env or as a file
+    # ChatGPT result agent. "chatgpt" uses the Codex CLI signed in with a ChatGPT plan (Plus/Pro, no
+    # API key; login once with `docker compose exec backend codex login --device-auth`), "openai_api"
+    # uses the OpenAI API with OPENAI_API_KEY.
+    result_agent_provider: Literal["chatgpt", "openai_api"] = "chatgpt"
+    codex_bin: str = "codex"
+    codex_home: str = "/data/codex"
+    codex_model: str = ""
+    codex_timeout_seconds: int = Field(default=300, ge=30, le=1800)
+
+    # OpenAI API (provider "openai_api"). The key is a secret: set it only in .env or as a file
     # (Docker secret) via OPENAI_API_KEY_FILE – never in the repository.
     openai_api_key: SecretStr | None = None
     openai_api_key_file: str | None = None
@@ -56,6 +65,8 @@ class Settings(BaseSettings):
     result_agent_retry_minutes: int = Field(default=20, ge=1, le=1440)
     result_agent_max_calls_per_day: int = Field(default=40, ge=1, le=1000)
     result_agent_max_matches_per_run: int = Field(default=3, ge=1, le=13)
+    # independent ChatGPT searches that must report the same score before it counts (prompt-injection guard)
+    result_agent_confirm_runs: int = Field(default=2, ge=1, le=5)
 
     # Validation of reported results (applies to every ChatGPT answer)
     agent_trusted_domains: str = (
