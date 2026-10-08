@@ -15,6 +15,8 @@ function ScoringForm({ season }: { season: Season }) {
   const toast = useToast();
   const invalidate = useInvalidateAdmin();
   const [form, setForm] = useState({
+    name: season.name,
+    year: season.year,
     winner_points: season.winner_points,
     exact_score_points: season.exact_score_points,
     champion_bonus: season.champion_bonus,
@@ -23,6 +25,8 @@ function ScoringForm({ season }: { season: Season }) {
   });
   useEffect(() => {
     setForm({
+      name: season.name,
+      year: season.year,
       winner_points: season.winner_points,
       exact_score_points: season.exact_score_points,
       champion_bonus: season.champion_bonus,
@@ -59,6 +63,8 @@ function ScoringForm({ season }: { season: Season }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Input label="Saisonname" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} pattern="\d{4}/\d{4}" required />
+        <Input label="Startjahr" type="number" min={2000} max={2100} value={String(form.year)} onChange={(e) => setForm({ ...form, year: Number(e.target.value) })} required />
         {num("winner_points", "Richtiger Sieger")}
         {num("exact_score_points", "Exakter Endstand")}
         {num("champion_bonus", "Super-Bowl-Bonus")}

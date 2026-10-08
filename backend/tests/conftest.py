@@ -35,6 +35,7 @@ from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402
 from app.models.enums import Role  # noqa: E402
 from app.seed.__main__ import ensure_teams  # noqa: E402
+from app.services import app_settings  # noqa: E402
 from app.services.bot import get_bot_user  # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(__file__))
@@ -134,7 +135,10 @@ async def login(username: str, password: str = PASSWORD) -> Api:
 
 @pytest.fixture
 async def admin() -> Api:
-    await create_user("admin", Role.ADMIN, superuser=True)
+    owner = await create_user("admin", Role.ADMIN, superuser=True)
+    async with get_sessionmaker()() as session:
+        await app_settings.set_value(session, app_settings.INSTANCE_OWNER_USER_ID, str(owner.id))
+        await session.commit()
     return await login("admin")
 
 

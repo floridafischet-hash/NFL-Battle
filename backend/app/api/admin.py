@@ -167,10 +167,6 @@ async def update_user(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Der Inhaber der Instanz kann nicht gesperrt oder herabgestuft werden."
         )
-    if user.is_superuser and body.username is not None and body.username != user.username:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Der Benutzername des Inhabers ist in der Serverkonfiguration festgelegt."
-        )
     invalidate_tokens = False
     if body.username is not None and body.username != user.username:
         user.username = body.username
@@ -280,6 +276,8 @@ class SeasonCreateIn(SeasonConfig):
 
 
 class SeasonUpdateIn(BaseModel):
+    name: str | None = Field(default=None, pattern=r"^\d{4}/\d{4}$")
+    year: int | None = Field(default=None, ge=2000, le=2100)
     winner_points: int | None = Field(default=None, ge=0, le=100)
     exact_score_points: int | None = Field(default=None, ge=0, le=100)
     champion_bonus: int | None = Field(default=None, ge=0, le=100)

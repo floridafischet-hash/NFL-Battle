@@ -175,7 +175,6 @@ function EditUserModal({ user, onClose, onDone }: { user: AdminUser; onClose: ()
           label="Benutzername (Login)"
           value={form.username}
           onChange={(e) => setForm({ ...form, username: e.target.value })}
-          disabled={!!user.is_superuser}
           required
           minLength={2}
           maxLength={32}

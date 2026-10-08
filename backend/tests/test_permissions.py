@@ -58,6 +58,13 @@ async def test_draft_seasons_hidden_from_users(admin, players):
     assert len((await admin.get("/api/seasons")).json()) == 1
 
 
+async def test_admin_can_edit_season_identity(admin):
+    season = (await admin.post("/api/admin/seasons", {"name": "2031/2032", "year": 2031})).json()
+    r = await admin.patch(f"/api/admin/seasons/{season['id']}", {"name": "2032/2033", "year": 2032})
+    assert r.status_code == 200
+    assert r.json()["name"] == "2032/2033" and r.json()["year"] == 2032
+
+
 async def test_only_one_active_season(admin):
     for year in (2031, 2032):
         await admin.post("/api/admin/seasons", {"name": f"{year}/{year + 1}", "year": year})

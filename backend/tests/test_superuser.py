@@ -27,11 +27,13 @@ async def test_only_the_instance_owner_manages_users(admin, players):
     assert (await admin.patch(f"/api/admin/users/{owner['id']}", {"role": "USER"})).status_code == 409
 
 
-async def test_configured_admin_username_transfers_instance_ownership(admin, players, monkeypatch):
+async def test_instance_owner_persists_when_username_changes(admin, players, monkeypatch):
+    me = (await admin.get("/api/me")).json()
+    r = await admin.patch(f"/api/admin/users/{me['id']}", {"username": "boss", "display_name": "Boss"})
+    assert r.status_code == 200
     monkeypatch.setattr(get_settings(), "admin_username", "florian")
     async with get_sessionmaker()() as session:
         owner = await ensure_admin(session)
         await session.commit()
-    assert owner is not None and owner.username == "florian" and owner.is_superuser
-    assert (await players["florian"].get("/api/me")).json()["is_superuser"] is True
-    assert (await admin.get("/api/me")).json()["is_superuser"] is False
+    assert owner is not None and owner.username == "boss" and owner.is_superuser
+    assert (await players["florian"].get("/api/me")).json()["is_superuser"] is False

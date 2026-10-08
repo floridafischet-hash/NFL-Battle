@@ -12,6 +12,7 @@ import logging
 import random
 import secrets
 import string
+import uuid
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -33,7 +34,7 @@ from app.models import (
 )
 from app.models.enums import MatchStatus, ResultSource, Role
 from app.seed.teams import NFL_TEAMS, default_logo_url, neutral_logo_url
-from app.services import bot
+from app.services import app_settings, bot
 from app.services.bracket_engine import Pick, slots_in_resolution_order
 from app.services.brackets import load_context, picks_by_slot
 from app.services.match_admin import (
@@ -97,32 +98,41 @@ async def ensure_teams(session) -> dict[str, Team]:
 
 async def ensure_admin(session) -> User | None:
     settings = get_settings()
-    username = settings.admin_username.strip().lower()
-    admin = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
-    if admin is not None:
-        await session.execute(
-            update(User).where(User.is_superuser.is_(True), User.id != admin.id).values(is_superuser=False)
-        )
-        if not admin.is_superuser or admin.role != Role.ADMIN or not admin.is_active:
-            admin.is_superuser = True  # the instance owner (ADMIN_USERNAME) always manages the users
-            admin.role = Role.ADMIN
-            admin.is_active = True
-        return admin
-    password = settings.admin_password
-    if is_placeholder(password):
-        password = random_password(12)
-        banner(f"Initialer Admin: Benutzername '{username}', Passwort '{password}' – bitte nach dem Login ändern")
-    admin = User(
-        username=username,
-        display_name=settings.admin_display_name,
-        role=Role.ADMIN,
-        is_superuser=True,
-        password_hash=hash_password(password),
+    owner = None
+    owner_id = await app_settings.get_value(session, app_settings.INSTANCE_OWNER_USER_ID)
+    if owner_id:
+        try:
+            owner = await session.get(User, uuid.UUID(owner_id))
+        except ValueError:
+            owner = None
+    if owner is None:
+        username = settings.admin_username.strip().lower()
+        owner = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
+        if owner is None:
+            password = settings.admin_password
+            if is_placeholder(password):
+                password = random_password(12)
+                banner(
+                    f"Initialer Admin: Benutzername '{username}', Passwort '{password}' – bitte nach dem Login ändern"
+                )
+            owner = User(
+                username=username,
+                display_name=settings.admin_display_name,
+                role=Role.ADMIN,
+                is_superuser=True,
+                password_hash=hash_password(password),
+            )
+            session.add(owner)
+            await session.flush()
+            log.info("created initial admin account '%s'", username)
+        await app_settings.set_value(session, app_settings.INSTANCE_OWNER_USER_ID, str(owner.id))
+    await session.execute(
+        update(User).where(User.is_superuser.is_(True), User.id != owner.id).values(is_superuser=False)
     )
-    session.add(admin)
-    await session.flush()
-    log.info("created initial admin account '%s'", username)
-    return admin
+    owner.is_superuser = True
+    owner.role = Role.ADMIN
+    owner.is_active = True
+    return owner
 
 
 # ---------------------------------------------------------------------------------------------- demo

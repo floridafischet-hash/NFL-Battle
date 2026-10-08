@@ -10,6 +10,7 @@ from app.models import AppSetting
 
 KING_NAME = "king_name"
 KING_TITLE = "king_title"
+INSTANCE_OWNER_USER_ID = "instance_owner_user_id"
 DEFAULT_KING_TITLE = "König"
 
 
