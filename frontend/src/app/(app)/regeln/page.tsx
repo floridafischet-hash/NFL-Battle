@@ -3,7 +3,7 @@
 import { ExternalLink, Search, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
-const RULEBOOK_URL = "https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf";
+const RULEBOOK_URL = "/2026-nfl-rulebook.pdf";
 
 export default function RulesPage() {
   const [input, setInput] = useState("");
