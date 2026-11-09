@@ -39,7 +39,7 @@ def serialize(message: ChatMessage) -> dict[str, Any]:
 
 
 async def list_messages(session: AsyncSession, before_id: int | None, limit: int) -> list[dict[str, Any]]:
-    stmt = select(ChatMessage).order_by(ChatMessage.id.desc()).limit(limit)
+    stmt = select(ChatMessage).where(ChatMessage.deleted_at.is_(None)).order_by(ChatMessage.id.desc()).limit(limit)
     if before_id is not None:
         stmt = stmt.where(ChatMessage.id < before_id)
     rows = list((await session.execute(stmt)).unique().scalars())

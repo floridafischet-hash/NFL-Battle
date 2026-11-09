@@ -36,6 +36,10 @@ export function appendChatMessage(qc: QueryClient, message: ChatMessage) {
   });
 }
 
+export function removeChatMessage(qc: QueryClient, messageId: number) {
+  qc.setQueryData<ChatMessage[]>(["chat"], (old) => old?.filter((message) => message.id !== messageId));
+}
+
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const qc = useQueryClient();
@@ -66,7 +70,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           break;
         }
         case "chat_message_deleted":
-          invalidate(qc, ["chat"]);
+          removeChatMessage(qc, Number(event.id));
           break;
         case "notification":
           invalidate(qc, ["notifications"]);

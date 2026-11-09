@@ -310,3 +310,125 @@ export interface HallOfFameData {
     best_rank: number | null;
   }[];
 }
+
+export interface LiveTeam {
+  id: string;
+  abbreviation: string;
+  slug: string;
+  name: string;
+  short_name: string;
+  location: string;
+  color: string | null;
+  alternate_color: string | null;
+  logo: string | null;
+  record?: string | null;
+  standing?: string | null;
+}
+
+export interface LiveGame {
+  id: string;
+  date: string;
+  completed: boolean;
+  status: string;
+  home_away: "home" | "away";
+  team_score: string | number | null;
+  opponent_score: string | number | null;
+  won: boolean | null;
+  opponent: { name: string; abbreviation: string; logo: string | null };
+  venue: string | null;
+}
+
+export interface LiveScoreboardTeam {
+  id: string;
+  name: string;
+  short_name: string;
+  abbreviation: string;
+  logo: string | null;
+  score: string | number | null;
+  record: string | null;
+  winner: boolean | null;
+}
+
+export interface LiveScoreboardGame {
+  id: string;
+  date: string;
+  week: number | null;
+  season_type: number;
+  state: "pre" | "in" | "post";
+  completed: boolean;
+  status: string | null;
+  venue: string | null;
+  home: LiveScoreboardTeam;
+  away: LiveScoreboardTeam;
+}
+
+export interface LiveScoreboard {
+  updated_at: string;
+  source: string;
+  regular_season: boolean;
+  season: number | null;
+  week: number | null;
+  games: LiveScoreboardGame[];
+  favorites: string[];
+  favorite_standings: LiveFavoriteStanding[];
+}
+
+export interface LiveFavoriteStanding {
+  slug: string;
+  name: string;
+  short_name: string;
+  abbreviation: string;
+  logo: string | null;
+  conference: "AFC" | "NFC";
+  rank: number;
+  record: string | null;
+}
+
+export interface LivePlayer {
+  id: string;
+  name: string;
+  jersey: string | null;
+  position: string | null;
+  position_name: string | null;
+  age: number | null;
+  experience: number | null;
+  height: string | null;
+  weight: string | null;
+  headshot: string | null;
+  status: string | null;
+}
+
+export interface LivePlayerDetail {
+  updated_at: string;
+  source: string;
+  season: number;
+  player: {
+    id: string;
+    name: string;
+    jersey: string | null;
+    position: string | null;
+    position_name: string | null;
+    headshot: string | null;
+    age: number | null;
+    height: string | null;
+    weight: string | null;
+    experience: string | null;
+    college: string | null;
+    status: string | null;
+    draft: string | null;
+  };
+  summary: { key: string; label: string; value: string | null }[];
+  categories: { key: string; label: string; stats: { key: string; label: string; value: string }[] }[];
+}
+
+export interface LiveTeamDetail {
+  updated_at: string;
+  source: string;
+  team: LiveTeam;
+  last_games: LiveGame[];
+  upcoming_games: LiveGame[];
+  statistics: { key: string; label: string; value: string | null }[];
+  injuries: { id: string; name: string; position: string | null; headshot: string | null; status: string; detail: string | null; return_date: string | null; updated_at: string | null }[];
+  roster: { key: string; label: string; players: LivePlayer[] }[];
+  odds: { event_id: string; date: string; opponent: string; provider: string | null; details: string | null; over_under: number | null; team_moneyline: string | null; opponent_moneyline: string | null; updated_note: string } | null;
+}

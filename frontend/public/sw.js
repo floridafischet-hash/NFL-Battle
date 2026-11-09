@@ -1,6 +1,6 @@
 /* NFL Bracket Battle – minimal service worker: makes the app installable and shows an offline
  * notice. API calls, WebSocket and uploads are never cached (always live data). */
-const CACHE = "nbb-shell-v1";
+const CACHE = "nbb-shell-v2";
 const SHELL = ["/offline.html", "/icons/icon-192.png", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {

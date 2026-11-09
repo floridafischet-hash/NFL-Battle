@@ -10,7 +10,7 @@ import { del, get, post, upload } from "@/lib/api";
 import { useMe } from "@/lib/auth";
 import { chatTime } from "@/lib/format";
 import { useChat } from "@/lib/queries";
-import { appendChatMessage } from "@/lib/realtime";
+import { appendChatMessage, removeChatMessage } from "@/lib/realtime";
 import { useToast } from "@/lib/toast";
 import type { ChatMessage } from "@/lib/types";
 
@@ -78,7 +78,18 @@ export function ChatPanel({ compact, className }: { compact?: boolean; className
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const fileInput = useRef<HTMLInputElement>(null);
+  const textInput = useRef<HTMLTextAreaElement>(null);
   const messages = chat.data ?? [];
+
+  useLayoutEffect(() => {
+    const el = textInput.current;
+    if (!el) return;
+    const maxHeight = 128;
+    el.style.height = "0px";
+    const nextHeight = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [text]);
 
   const send = useMutation({
     mutationFn: () => post<ChatMessage>("/api/chat/messages", { body: text, upload_id: image?.id ?? null }),
@@ -143,7 +154,7 @@ export function ChatPanel({ compact, className }: { compact?: boolean; className
   const remove = async (id: number) => {
     try {
       await del(`/api/chat/messages/${id}`);
-      qc.invalidateQueries({ queryKey: ["chat"] });
+      removeChatMessage(qc, id);
     } catch (err) {
       toast.error("Löschen fehlgeschlagen", err instanceof Error ? err.message : undefined);
     }
@@ -241,6 +252,7 @@ export function ChatPanel({ compact, className }: { compact?: boolean; className
           </button>
           <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => onFile(e.target.files?.[0])} />
           <textarea
+            ref={textInput}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 1000))}
             onKeyDown={onKeyDown}

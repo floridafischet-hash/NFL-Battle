@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { BracketBoard } from "@/components/bracket/BracketBoard";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Greeting } from "@/components/dashboard/Greeting";
-import { LeaderboardCompact, NextGameCard, RecentResults, UserStatsCard } from "@/components/dashboard/Widgets";
+import { CurrentGamesCard, DashboardCountdown, FavoriteStandingsCard, LeaderboardCompact, RecentResults, UserStatsCard } from "@/components/dashboard/Widgets";
 import { Button, Card, EmptyState, Loading, Tabs } from "@/components/ui";
 import { slotsFromMatches, withOrigins } from "@/lib/bracket";
 import { superBowlName } from "@/lib/format";
@@ -35,6 +35,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-5">
         <Greeting />
+        <DashboardCountdown />
         <Card>
           <EmptyState title="Noch keine Saison">
             Ein Admin muss zuerst eine Saison mit Teams und Paarungen anlegen. Danach erscheint hier der Playoff-Bracket.
@@ -51,6 +52,7 @@ export default function DashboardPage() {
     <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-5">
         <Greeting />
+        <DashboardCountdown />
         {/* Hero / bracket */}
         <section className="glass relative overflow-hidden rounded-3xl">
           <div className="pointer-events-none absolute -top-24 left-0 h-48 w-1/2 bg-gradient-to-r from-afc/25 to-transparent blur-3xl" />
@@ -113,10 +115,11 @@ export default function DashboardPage() {
         </section>
 
         <div className="2xl:hidden">
-          <NextGameCard match={d.next_match} />
+          <CurrentGamesCard fallback={d.next_match} />
         </div>
 
         <div className={clsx("grid gap-5 md:grid-cols-2 xl:grid-cols-3")}>
+          <FavoriteStandingsCard />
           {d.me && <UserStatsCard me={d.me} />}
           <LeaderboardCompact rows={d.leaderboard ?? []} />
           <RecentResults matches={d.recent_results ?? []} />
@@ -125,7 +128,7 @@ export default function DashboardPage() {
 
       <aside className="min-w-0 space-y-5">
         <div className="hidden 2xl:block">
-          <NextGameCard match={d.next_match} />
+          <CurrentGamesCard fallback={d.next_match} />
         </div>
         <Card
           title={

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, game, public, social
+from app.api import admin, auth, game, live_teams, public, social
 from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.realtime.hub import listen_forever
@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 
-    for module in (public, auth, game, social, admin):
+    for module in (public, auth, game, live_teams, social, admin):
         app.include_router(module.router)
     app.include_router(social.ws_router)
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)

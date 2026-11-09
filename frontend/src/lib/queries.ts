@@ -15,6 +15,10 @@ import type {
   Season,
   SeasonMatch,
   Team,
+  LiveTeam,
+  LiveTeamDetail,
+  LivePlayerDetail,
+  LiveScoreboard,
   UserRef,
   UserStats,
 } from "./types";
@@ -102,6 +106,41 @@ export function usePlayers() {
 
 export function useTeams() {
   return useQuery({ queryKey: ["teams"], queryFn: () => get<Team[]>("/api/teams"), staleTime: 300_000 });
+}
+
+export function useLiveTeams() {
+  return useQuery({
+    queryKey: ["live-nfl", "teams"],
+    queryFn: () => get<{ updated_at: string | null; source: string; teams: LiveTeam[]; favorites: string[] }>("/api/live/teams"),
+    staleTime: 300_000,
+  });
+}
+
+export function useLiveTeam(slug: string | null) {
+  return useQuery({
+    queryKey: ["live-nfl", "team", slug],
+    queryFn: () => get<LiveTeamDetail>(`/api/live/teams/${slug}`),
+    enabled: !!slug,
+    staleTime: 300_000,
+  });
+}
+
+export function useLivePlayer(athleteId: string | null) {
+  return useQuery({
+    queryKey: ["live-nfl", "player", athleteId],
+    queryFn: () => get<LivePlayerDetail>(`/api/live/players/${athleteId}`),
+    enabled: !!athleteId,
+    staleTime: 300_000,
+  });
+}
+
+export function useLiveGames() {
+  return useQuery({
+    queryKey: ["live-nfl", "games"],
+    queryFn: () => get<LiveScoreboard>("/api/live/games"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 }
 
 export function useUserStats(userId: string, seasonId: number | null) {

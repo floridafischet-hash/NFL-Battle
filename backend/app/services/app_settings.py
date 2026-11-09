@@ -1,4 +1,4 @@
-"""Admin-editable settings for the dashboard greeting."""
+"""Admin-editable, instance-wide application settings."""
 
 from __future__ import annotations
 

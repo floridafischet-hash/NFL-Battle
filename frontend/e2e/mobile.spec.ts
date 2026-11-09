@@ -22,3 +22,18 @@ test("Smartphone: Menü, Dashboard und horizontal scrollbares Bracket", async ({
   const box = await row.boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(36);
 });
+
+test("Smartphone: Hauptseiten bleiben im Viewport und das Menü ist vollständig scrollbar", async ({ page }) => {
+  await loginUI(page, ADMIN.username, ADMIN.password);
+  for (const route of ["/", "/aktuelle-spiele", "/teams", "/spiele", "/rangliste", "/statistiken", "/chat", "/profil"]) {
+    await page.goto(route);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  }
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  const mobileNav = page.locator(".fixed.inset-0").getByRole("navigation", { name: "Hauptnavigation" });
+  await expect(mobileNav.getByRole("link", { name: "Hall of Fame" })).toBeVisible();
+  await mobileNav.getByRole("link", { name: "Hall of Fame" }).scrollIntoViewIfNeeded();
+  await expect(mobileNav.getByRole("link", { name: "Hall of Fame" })).toBeInViewport();
+});

@@ -1,0 +1,19 @@
+services:
+  pwa_https:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      PWA_CERT_NAME: ${PWA_CERT_NAME:?set PWA_CERT_NAME in .env}
+    ports:
+      - "${PWA_HTTPS_BIND:-0.0.0.0}:${PWA_HTTPS_PORT:-18780}:443"
+    volumes:
+      - ./nginx/pwa-https.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5

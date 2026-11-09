@@ -40,7 +40,7 @@ async def test_chat_post_list_delete(admin, players):
     other = listing[-1]["id"]
     assert (await admin.delete(f"/api/chat/messages/{other}")).status_code == 204
     listing = (await dennis.get("/api/chat/messages")).json()
-    assert all(m["deleted"] for m in listing[-2:]) and listing[-1]["body"] == ""
+    assert all(m["id"] not in {msg["id"], other} for m in listing)
 
 
 async def test_chat_image_upload(players):

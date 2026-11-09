@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, str_enum
@@ -29,3 +29,13 @@ class User(TimestampMixin, Base):
     @property
     def is_admin(self) -> bool:
         return self.role == Role.ADMIN
+
+
+class UserTeamFavorite(Base):
+    """One user's ordered NFL team favorites."""
+
+    __tablename__ = "user_team_favorites"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    team_slug: Mapped[str] = mapped_column(String(64), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)

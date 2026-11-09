@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
+  Activity,
   BarChart3,
   Bell,
   CalendarDays,
@@ -15,6 +16,7 @@ import {
   Menu,
   MessageSquare,
   Network,
+  Shield,
   ShieldCheck,
   UserRound,
   X,
@@ -31,11 +33,14 @@ import { useRealtime } from "@/lib/realtime";
 
 import { Avatar } from "./Avatar";
 import { Brand } from "./Brand";
+import { PwaInstallButton } from "./PwaInstallButton";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bracket", label: "Mein Bracket", icon: Network },
   { href: "/spiele", label: "Spiele", icon: CalendarDays },
+  { href: "/aktuelle-spiele", label: "Aktuelle Spiele", icon: Activity },
+  { href: "/teams", label: "NFL Teams", icon: Shield },
   { href: "/rangliste", label: "Rangliste", icon: ListOrdered },
   { href: "/brackets", label: "Alle Brackets", icon: GitCompareArrows },
   { href: "/chat", label: "Chat", icon: MessageSquare },
@@ -84,7 +89,10 @@ function Sidebar() {
       <Link href="/" className="focus-ring mb-8 rounded-xl px-2">
         <Brand />
       </Link>
-      <NavLinks />
+      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+        <NavLinks />
+      </div>
+      <PwaInstallButton className="mt-3" />
       <div className="mt-auto rounded-xl border border-white/5 bg-white/[0.03] p-3">
         <p className="text-[11px] font-medium tracking-wider text-slate-500 uppercase">Saison</p>
         <p className="display text-lg font-semibold text-white">{season.data?.name ?? "—"}</p>
@@ -213,7 +221,7 @@ function Header({ onMenu }: { onMenu: () => void }) {
   const { connected } = useRealtime();
   const { logout } = useAuth();
   return (
-    <header className="sticky top-0 z-30 border-b border-white/5 bg-ink-950/60 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-white/5 bg-ink-950/60 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="flex h-16 items-center gap-2 px-3 sm:px-6">
         <button
           onClick={onMenu}
@@ -263,7 +271,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDrawer(false)} />
-          <div className="absolute inset-y-0 left-0 flex w-[82vw] max-w-[300px] animate-fade-up flex-col bg-ink-950 px-4 py-5">
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-[320px] animate-fade-up flex-col bg-ink-950 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             <div className="mb-6 flex items-center justify-between">
               <Brand compact />
               <button
@@ -274,13 +282,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <X className="size-6" />
               </button>
             </div>
-            <NavLinks onNavigate={() => setDrawer(false)} />
+            <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <NavLinks onNavigate={() => setDrawer(false)} />
+            </div>
+            <PwaInstallButton className="mt-3 shrink-0" />
           </div>
         </div>
       )}
       <div className="lg:pl-[248px]">
         <Header onMenu={() => setDrawer(true)} />
-        <main className="mx-auto w-full max-w-[1800px] px-3 py-5 sm:px-6 sm:py-7">{children}</main>
+        <main className="mx-auto w-full max-w-[1800px] px-3 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-7">{children}</main>
       </div>
     </div>
   );

@@ -28,7 +28,15 @@ Hall of Fame. 🏆
 - **ChatGPT trägt die Ergebnisse ein**: über **dein ChatGPT-Abo (Plus/Pro)**, ohne API-Key.
   Es sucht live auf NFL.com, ESPN & Co., und erst wenn zwei Seiten dasselbe sagen, wird gewertet.
 - **Live-Chat** mit Bildern und Emojis. Der **NFL Bot** postet Paarungen, Kickoffs, Endstände,
-  Punkte, die neue Rangliste und erinnert an fehlende Tipps.
+  Punkte, die neue Rangliste und erinnert an fehlende Tipps. Mehrzeilige Nachrichten vergrößern
+  das Eingabefeld automatisch; gelöschte Nachrichten verschwinden vollständig.
+- **Aktuelle NFL-Spiele**: Regular-Season-Spielplan mit Live-Ständen, kommenden Partien und den
+  jüngsten Ergebnissen – auf dem Dashboard und als eigene Vollbildseite.
+- **Alle NFL-Teams im Überblick**: Form und letzte fünf Spiele, kommende Spiele, Saisonstatistiken,
+  Kader mit Positionen, Verletzungen und verfügbare Quoten. Ein Klick auf einen Spieler öffnet
+  dessen aktuelle Saisonstatistiken.
+- **Persönliche Team-Favoriten**: Jeder Benutzer markiert seine eigenen Teams. Die Auswahl wird
+  ausschließlich im jeweiligen Benutzerkonto gespeichert und in der Teamliste zuerst angezeigt.
 - **Rangliste, Statistiken, Bracket-Vergleich, Hall of Fame** und die ewige Tabelle.
 - **Offizielle Teamlogos** (werden direkt geladen, nicht im Repo gespeichert).
 - **Adminbereich**: Benutzer, Saisons, Teams, Drag & Drop fürs Bracket-Setup, Ergebnisse,
@@ -98,6 +106,21 @@ den Server, und die Ports 80 und 443 sind offen. Hast du schon einen anderen Rev
 lass das Overlay weg, setz `HTTP_BIND=127.0.0.1` und leite auf `127.0.0.1:8080` weiter
 (WebSockets für `/ws` durchlassen!).
 
+Für die Installation als Web-App ist **HTTPS zwingend** (außer auf `localhost`). Das Manifest,
+die Icons, der Offline-Hinweis und der Service Worker sind bereits enthalten. Wer auf dem Host
+schon ein gültiges Let's-Encrypt-Zertifikat unter `/etc/letsencrypt` verwaltet, kann alternativ
+den schlanken PWA-Proxy verwenden:
+
+```bash
+# zusätzlich in der .env:
+PWA_CERT_NAME=tippspiel.deine-domain.de
+PWA_HTTPS_PORT=8443
+
+docker compose -f docker-compose.yml -f docker-compose.pwa.yml up -d
+```
+
+Der normale produktive Weg bleibt `docker-compose.prod.yml` mit eigener Domain auf Port 443.
+
 ---
 
 ## So läuft eine Saison
@@ -114,6 +137,26 @@ lass das Overlay weg, setz `HTTP_BIND=127.0.0.1` und leite auf `127.0.0.1:8080` 
 
 Falsches Ergebnis? *„Ergebnis korrigieren“*, und die Punkte werden neu berechnet.
 Punktesystem geändert? **Saisons → „Punkte neu berechnen“**.
+
+---
+
+## Aktuelle NFL-Daten
+
+Die Seiten **Aktuelle Spiele** und **NFL Teams** lesen öffentlich verfügbare NFL-Daten von ESPN.
+Die Anwendung speichert diese Informationen kurz zwischen, damit die Quelle nicht bei jedem Klick
+erneut belastet wird.
+
+- Spielstände und Spielpläne werden ungefähr einmal pro Minute aktualisiert.
+- Laufende Spiele stehen oben, danach folgen die nächsten geplanten Partien.
+- Beendete Spiele werden nach und nach ausgeblendet; auf dem Dashboard bleiben nur die relevanten
+  jüngsten Ergebnisse sichtbar.
+- Teamdetails enthalten – soweit von der Quelle verfügbar – Bilanz, Tabellenposition, letzte fünf
+  Spiele, nächste Spiele, Statistiken, Kader, Verletzungen und Quoten.
+- Kaderpositionen werden ausgeschrieben; Spielerkarten öffnen die aktuellen Saisonstatistiken.
+- Quoten sind Momentaufnahmen, können regional fehlen und sind ausdrücklich keine Wettberatung.
+
+Die Live-Daten sind nur für angemeldete Benutzer erreichbar. Persönliche Favoriten liegen in der
+Datenbank und werden bei einer Benutzerlöschung automatisch mit entfernt.
 
 ---
 
@@ -138,6 +181,8 @@ Die wichtigsten Variablen. Alle anderen sind in [.env.example](.env.example) kom
 |---|---|---|
 | `PUBLIC_URL` | `http://localhost:8080` | Adresse der App |
 | `HTTP_PORT` | `8080` | Port, falls 8080 schon belegt ist |
+| `PWA_HTTPS_PORT` | `18780` | optionaler HTTPS-Port für `docker-compose.pwa.yml` |
+| `PWA_CERT_NAME` | – | Zertifikatsverzeichnis unter `/etc/letsencrypt/live` für den optionalen PWA-Proxy |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / zufällig | erster Admin |
 | `SEED_DEMO_DATA` | `false` | `true` = Demo-Saisons, Demo-Spieler und Chat zum Rumprobieren. Standard: leere Instanz |
 | `RESULT_AGENT_PROVIDER` | `chatgpt` | `chatgpt` = dein Abo (Codex-Login), `openai_api` = API-Key |

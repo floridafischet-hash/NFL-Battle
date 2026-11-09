@@ -1,16 +1,17 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, ArrowUp, Minus, Trophy } from "lucide-react";
+import { Activity, ArrowDown, ArrowRight, ArrowUp, CalendarDays, ChevronDown, Maximize2, Minus, Star, Trophy } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { TeamLogo } from "@/components/TeamLogo";
-import { Button, Card, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Loading } from "@/components/ui";
 import { slotLabel } from "@/lib/bracket";
-import { countdown, dateLong, timeOnly } from "@/lib/format";
-import type { DashboardData, LeaderboardRow, Match, Tip } from "@/lib/types";
+import { countdown, dateLong, dateTime, kickoffShort, timeOnly } from "@/lib/format";
+import { useLiveGames } from "@/lib/queries";
+import type { DashboardData, LeaderboardRow, LiveScoreboardGame, LiveScoreboardTeam, Match, Tip } from "@/lib/types";
 
 function CountdownBox({ target }: { target: string | null }) {
   const [now, setNow] = useState(() => Date.now());
@@ -115,6 +116,103 @@ export function NextGameCard({ match }: { match: (Match & { my_pick: Tip | null 
       </div>
     </Card>
   );
+}
+
+function ScoreboardTeam({ team, gameState }: { team: LiveScoreboardTeam; gameState: LiveScoreboardGame["state"] }) {
+  return <div className="flex min-w-0 items-center gap-2">
+    {team.logo ? <img src={team.logo} alt="" className="size-8 shrink-0 object-contain" /> : <div className="size-8 shrink-0" />}
+    <div className="min-w-0 flex-1">
+      <p className={clsx("truncate text-xs font-semibold", team.winner ? "text-white" : "text-slate-300")}>{team.short_name || team.name}</p>
+      {team.record && <p className="text-[10px] text-slate-500">{team.record}</p>}
+    </div>
+    {gameState !== "pre" && <span className={clsx("display text-lg font-bold tabular-nums", team.winner ? "text-gold" : "text-white")}>{team.score ?? "–"}</span>}
+  </div>;
+}
+
+export function ScoreboardGame({ game, favorite = false }: { game: LiveScoreboardGame; favorite?: boolean }) {
+  const live = game.state === "in";
+  return <div className={clsx("relative rounded-xl border p-3 transition-colors", favorite ? "border-gold/45 bg-gold/[0.09] shadow-[inset_3px_0_0_#d6b35a]" : live ? "border-red-500/25 bg-red-500/[0.06]" : "border-white/7 bg-white/[0.025]")}>
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <span className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">{favorite && <Star className="size-3 fill-gold text-gold" aria-label="Favoritenteam beteiligt" />}{kickoffShort(game.date)}</span>
+      {live ? <Badge tone="red"><span className="mr-1 inline-block size-1.5 animate-pulse rounded-full bg-current" /> LIVE · {game.status}</Badge> : game.completed ? <Badge tone="neutral">Endstand</Badge> : <Badge tone="neutral">Geplant</Badge>}
+    </div>
+    <div className="space-y-1.5">
+      <ScoreboardTeam team={game.away} gameState={game.state} />
+      <ScoreboardTeam team={game.home} gameState={game.state} />
+    </div>
+  </div>;
+}
+
+export function DashboardCountdown() {
+  const query = useLiveGames();
+  const nextGame = query.data?.games.find((game) => game.state === "pre");
+  if (!nextGame) return null;
+  return <details className="group glass mx-auto w-full max-w-2xl rounded-2xl border border-gold/20" open>
+    <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 [&::-webkit-details-marker]:hidden">
+      <span className="min-w-0">
+        <span className="block text-[10px] font-bold tracking-[0.22em] text-gold uppercase">Nächster Kickoff</span>
+        <span className="display block truncate text-sm font-bold text-white sm:text-base">{nextGame.away.short_name} @ {nextGame.home.short_name}</span>
+      </span>
+      <ChevronDown className="size-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+    </summary>
+    <div className="border-t border-white/5 px-4 py-3">
+      <CountdownBox target={nextGame.date} />
+    </div>
+  </details>;
+}
+
+export function FavoriteStandingsCard() {
+  const query = useLiveGames();
+  if (query.isLoading) return <Card title="Meine NFL-Teams"><Loading label="Platzierungen werden geladen …" /></Card>;
+  const rows = query.data?.favorite_standings ?? [];
+  return <Card title={<span className="flex items-center gap-2"><Star className="size-4 fill-gold text-gold" /> Meine NFL-Teams</span>} action={<Link href="/teams" className="text-xs font-semibold text-gold hover:underline">Bearbeiten</Link>} bodyClassName="p-2 sm:p-3">
+    {rows.length === 0 ? <EmptyState title="Noch keine Favoriten">Wähle auf der Teams-Seite deine NFL-Favoriten aus.</EmptyState> : <div className="divide-y divide-white/5">
+      {rows.map((row) => <Link key={row.slug} href={`/teams?team=${row.slug}`} className="focus-ring flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-white/5">
+        {row.logo ? <img src={row.logo} alt="" className="size-8 shrink-0 object-contain" /> : <div className="size-8" />}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{row.name}</span>
+        {row.record && <span className="text-xs tabular-nums text-slate-500">{row.record}</span>}
+        <Badge tone={row.conference === "AFC" ? "afc" : "nfc"}>{row.conference} · {row.rank}.</Badge>
+      </Link>)}
+    </div>}
+  </Card>;
+}
+
+export function scoreboardGroup(game: LiveScoreboardGame): "live" | "upcoming" | "completed" {
+  if (game.state === "in") return "live";
+  if (game.state === "pre") return "upcoming";
+  return "completed";
+}
+
+const SCOREBOARD_GROUP_LABELS = {
+  live: "Jetzt live",
+  upcoming: "Als Nächstes",
+  completed: "Letzte Ergebnisse",
+};
+
+export function CurrentGamesCard({ fallback }: { fallback: (Match & { my_pick: Tip | null }) | null | undefined }) {
+  const query = useLiveGames();
+  if (query.isLoading) return <Card title="Aktuelle NFL-Spiele" accent="gold"><Loading label="Spielplan wird geladen …" /></Card>;
+  const data = query.data;
+  if (query.error || !data?.regular_season || !data.games.length) return <NextGameCard match={fallback} />;
+  const liveCount = data.games.filter((game) => game.state === "in").length;
+  return <Card
+    title={<span className="flex items-center gap-2">{liveCount ? <Activity className="size-4 text-red-400" /> : <CalendarDays className="size-4 text-gold" />} Aktuelle NFL-Spiele</span>}
+    accent="gold"
+    action={<div className="flex items-center gap-3"><span className="text-[11px] font-semibold text-slate-400">Woche {data.week ?? "–"}</span><Link href="/aktuelle-spiele" className="flex items-center gap-1 text-xs font-semibold text-gold hover:underline">Vollbild <Maximize2 className="size-3.5" /></Link></div>}
+    bodyClassName="p-0"
+  >
+    <div className="scrollbar-thin max-h-[520px] space-y-2 overflow-y-auto p-4">
+      {data.games.map((game, index) => {
+        const group = scoreboardGroup(game);
+        const previous = index > 0 ? scoreboardGroup(data.games[index - 1]) : null;
+        return <Fragment key={game.id}>
+          {group !== previous && <p className={clsx("pt-1 text-[10px] font-bold tracking-[0.18em] uppercase", group === "live" ? "text-red-400" : group === "upcoming" ? "text-gold" : "text-slate-500")}>{SCOREBOARD_GROUP_LABELS[group]}</p>}
+          <ScoreboardGame game={game} favorite={data.favorites.some((slug) => [game.home.abbreviation, game.away.abbreviation].some((abbr) => abbr?.toLowerCase() === slug))} />
+        </Fragment>;
+      })}
+    </div>
+    <div className="border-t border-white/5 px-4 py-2 text-[10px] text-slate-500">Stand: {dateTime(data.updated_at)} · Quelle: {data.source} · Aktualisierung jede Minute</div>
+  </Card>;
 }
 
 export function UserStatsCard({ me }: { me: NonNullable<DashboardData["me"]> }) {

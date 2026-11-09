@@ -4,7 +4,7 @@ from app.models.bracket import Bracket, HallOfFame, Leaderboard, Prediction, Pre
 from app.models.season import Match, Season, SeasonTeam, Team
 from app.models.settings import AppSetting
 from app.models.social import AuditLog, ChatMessage, Notification, SystemMessage, Upload
-from app.models.user import User
+from app.models.user import User, UserTeamFavorite
 
 __all__ = [
     "AgentRun",
@@ -27,4 +27,5 @@ __all__ = [
     "Team",
     "Upload",
     "User",
+    "UserTeamFavorite",
 ]

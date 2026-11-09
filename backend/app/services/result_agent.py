@@ -72,7 +72,6 @@ CODEX_DISABLED_FEATURES = (
     "browser_use_external",
     "browser_use_full_cdp_access",
     "computer_use",
-    "code_mode_host",
     "in_app_browser",
     "multi_agent",
     "image_generation",
