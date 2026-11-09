@@ -61,54 +61,42 @@ function GameRow({ game }: { game: LiveGame }) {
   );
 }
 
-const STANDING_COLUMNS = [
-  ["S", "wins", "Siege"], ["N", "losses", "Niederlagen"], ["U", "ties", "Unentschieden"],
-  ["PCT", "win_percent", "Siegquote"], ["DIV", "division", "Bilanz in der Division"],
-  ["CONF", "conference", "Bilanz in der Conference"], ["HEIM", "home", "Heimbilanz"],
-  ["AUSW", "road", "Auswärtsbilanz"], ["PF", "points_for", "Erzielte Punkte"],
-  ["PA", "points_against", "Zugelassene Punkte"], ["DIFF", "differential", "Punktedifferenz"],
-  ["SERIE", "streak", "Aktuelle Serie"],
-] as const;
-
 function DivisionStandings({ divisions, favorites, onTeam }: { divisions: LiveDivisionStanding[]; favorites: Set<string>; onTeam: (slug: string) => void }) {
-  return <section className="mb-8" aria-labelledby="division-standings-title">
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-      <div>
-        <h2 id="division-standings-title" className="display text-2xl font-bold text-white">NFL Division Standings</h2>
-        <p className="text-xs text-slate-400">Aktuelle Tabellen und Saisonstatistiken aller acht Divisions</p>
-      </div>
-      <div className="flex gap-2"><Badge tone="afc">AFC</Badge><Badge tone="nfc">NFC</Badge></div>
+  const conferences = ["AFC", "NFC"] as const;
+  const stat = (label: string, value: string | null, positive = false) => <span className="text-center">
+    <span className="block text-[8px] font-bold tracking-wide text-slate-600 uppercase">{label}</span>
+    <span className={clsx("block text-[10px] font-semibold tabular-nums", positive && value?.startsWith("+") ? "text-emerald-300" : "text-slate-300")}>{value ?? "–"}</span>
+  </span>;
+  return <section className="rounded-3xl border border-white/10 bg-black/20 p-3 sm:p-4" aria-labelledby="division-standings-title">
+    <div className="mb-4 border-b border-white/8 pb-3">
+      <h2 id="division-standings-title" className="display text-xl font-bold text-white">NFL Division Standings</h2>
+      <p className="text-[11px] text-slate-400">Aktuelle Tabellen und Saisonstatistiken</p>
     </div>
-    <div className="grid gap-4 2xl:grid-cols-2">
-      {divisions.map((division) => <Card key={division.abbreviation} className={division.conference === "AFC" ? "border-afc/20" : "border-nfc/20"} bodyClassName="p-0">
-        <div className="flex items-center justify-between border-b border-white/7 px-4 py-3">
-          <h3 className="display text-lg font-bold text-white">{division.name}</h3>
-          <Badge tone={division.conference === "AFC" ? "afc" : "nfc"}>{division.conference}</Badge>
+    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      {conferences.map((conference) => <div key={conference} className="min-w-0 space-y-3">
+        <div className={clsx("rounded-xl border px-3 py-2 text-center", conference === "AFC" ? "border-afc/30 bg-afc/10" : "border-nfc/30 bg-nfc/10")}>
+          <p className={clsx("display text-lg font-bold", conference === "AFC" ? "text-afc-soft" : "text-nfc-soft")}>{conference}</p>
         </div>
-        <div className="scrollbar-thin overflow-x-auto">
-          <table className="w-full min-w-[980px] text-xs">
-            <thead><tr className="bg-black/20 text-[10px] tracking-wider text-slate-500 uppercase">
-              <th className="sticky left-0 z-10 min-w-48 bg-ink-900 px-3 py-2 text-left font-semibold">Team</th>
-              {STANDING_COLUMNS.map(([label,,title]) => <th key={label} title={title} className="px-2 py-2 text-center font-semibold">{label}</th>)}
-            </tr></thead>
-            <tbody className="divide-y divide-white/5">{division.teams.map((team) => {
-              const favorite = favorites.has(team.slug);
-              return <tr key={team.slug} className={clsx("transition hover:bg-white/[0.04]", favorite && "bg-gold/[0.06]")}>
-                <td className={clsx("sticky left-0 z-10 px-3 py-2", favorite ? "bg-[#171811]" : "bg-ink-900")}>
-                  <button type="button" onClick={() => onTeam(team.slug)} className="focus-ring flex w-full items-center gap-2 rounded text-left">
-                    <span className="w-4 text-right text-[10px] text-slate-500 tabular-nums">{team.rank}</span>
-                    {team.logo ? <img src={team.logo} alt="" className="size-7 object-contain" /> : <span className="size-7" />}
-                    <span className="font-semibold text-white">{team.abbreviation}</span>
-                    <span className="truncate text-slate-400">{team.short_name}</span>
-                    {favorite && <Star className="ml-auto size-3 fill-gold text-gold" aria-label="Favoritenteam" />}
-                  </button>
-                </td>
-                {STANDING_COLUMNS.map(([,key]) => <td key={key} className={clsx("px-2 py-2 text-center tabular-nums", key === "differential" && team[key]?.startsWith("+") ? "font-semibold text-emerald-300" : "text-slate-300")}>{team[key] ?? "–"}</td>)}
-              </tr>;
-            })}</tbody>
-          </table>
-        </div>
-      </Card>)}
+        {divisions.filter((division) => division.conference === conference).map((division) => <div key={division.abbreviation} className={clsx("overflow-hidden rounded-xl border bg-ink-900/80", conference === "AFC" ? "border-afc/20" : "border-nfc/20")}>
+          <h3 className="border-b border-white/7 px-2 py-2 text-center text-[11px] font-bold tracking-wide text-white uppercase">{division.name.replace(`${conference} `, "")}</h3>
+          <div className="divide-y divide-white/5">{division.teams.map((team) => {
+            const favorite = favorites.has(team.slug);
+            return <button type="button" key={team.slug} onClick={() => onTeam(team.slug)} className={clsx("focus-ring block w-full p-2 text-left transition hover:bg-white/5", favorite && "bg-gold/[0.12] shadow-[inset_3px_0_0_#d6b35a]")}>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 text-right text-[9px] text-slate-600 tabular-nums">{team.rank}</span>
+                {team.logo ? <img src={team.logo} alt="" className="size-6 shrink-0 object-contain" /> : <span className="size-6 shrink-0" />}
+                <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-white">{team.abbreviation}</span>
+                <span className="text-[10px] font-semibold text-white tabular-nums">{team.wins}-{team.losses}{team.ties !== "0" ? `-${team.ties}` : ""}</span>
+                {favorite && <Star className="size-3 shrink-0 fill-gold text-gold" aria-label="Favoritenteam" />}
+              </span>
+              <span className="mt-1.5 grid grid-cols-4 gap-x-1 gap-y-1 border-t border-white/5 pt-1.5">
+                {stat("PCT", team.win_percent)}{stat("DIV", team.division)}{stat("CONF", team.conference)}{stat("Serie", team.streak)}
+                {stat("Heim", team.home)}{stat("Ausw", team.road)}{stat("PF/PA", `${team.points_for ?? "–"}/${team.points_against ?? "–"}`)}{stat("Diff", team.differential, true)}
+              </span>
+            </button>;
+          })}</div>
+        </div>)}
+      </div>)}
     </div>
   </section>;
 }
@@ -231,13 +219,14 @@ export default function TeamsPage() {
   return <div>
     <PageHeader title="NFL Teams" subtitle="Aktuelle Mannschaften, Form, Kader, Verletzungen und Quoten" />
     <p className="mb-4 text-xs text-slate-400">Mit dem Stern legst du deine persönlichen Favoriten fest. Sie werden nur in deinem Konto gespeichert und immer zuerst angezeigt.</p>
-    <div className="relative mb-5"><Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Team suchen …" className="focus-ring h-11 w-full rounded-xl border border-white/10 bg-white/5 pr-4 pl-10 text-sm text-white placeholder:text-slate-500 sm:max-w-md" /></div>
     {teams.isLoading && <Loading label="Aktuelle NFL-Teams werden geladen …" />}
     {teams.error && <ErrorBox error={teams.error} />}
-    {!!teams.data?.divisions.length && <DivisionStandings divisions={teams.data.divisions} favorites={favoriteSet} onTeam={setSelected} />}
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{filtered.map((team) => {
+    <div className="grid items-start gap-5 2xl:grid-cols-[minmax(600px,0.95fr)_minmax(520px,1.05fr)]">
+      <main className="order-1 min-w-0 2xl:order-2">
+        <div className="relative mb-5"><Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Team suchen …" className="focus-ring h-11 w-full rounded-xl border border-white/10 bg-white/5 pr-4 pl-10 text-sm text-white placeholder:text-slate-500" /></div>
+        <div className="grid gap-3 sm:grid-cols-2">{filtered.map((team) => {
       const favorite = favoriteSet.has(team.slug);
-      return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/25 bg-gold/[0.04]")} bodyClassName="flex items-center gap-4">
+      return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/60 bg-gold/[0.12] shadow-[0_0_24px_rgba(214,179,90,0.08)]")} bodyClassName="flex items-center gap-4">
         <button onClick={() => setSelected(team.slug)} className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left" aria-label={`${team.name} Details öffnen`}>
           <TeamLogo team={team} />
           <div className="min-w-0"><p className="display truncate text-lg font-bold text-white">{team.name}</p><p className="text-xs font-semibold text-slate-500">{team.abbreviation} · Details öffnen</p></div>
@@ -251,8 +240,11 @@ export default function TeamsPage() {
           className={clsx("focus-ring rounded-lg p-2 transition hover:bg-white/10", favorite ? "text-gold" : "text-slate-500")}
         ><Star className={clsx("size-5", favorite && "fill-current")} /></button>
       </Card>;
-    })}</div>
-    {!teams.isLoading && !filtered.length && <EmptyState title="Kein Team gefunden" />}
+        })}</div>
+        {!teams.isLoading && !filtered.length && <EmptyState title="Kein Team gefunden" />}
+      </main>
+      {!!teams.data?.divisions.length && <aside className="order-2 min-w-0 2xl:order-1"><DivisionStandings divisions={teams.data.divisions} favorites={favoriteSet} onTeam={setSelected} /></aside>}
+    </div>
     <TeamDetail slug={selectedPlayer ? null : selected} onClose={() => setSelected(null)} onPlayer={setSelectedPlayer} />
     <PlayerDetail athleteId={selectedPlayer?.id ?? null} onClose={() => setSelectedPlayer(null)} />
   </div>;
