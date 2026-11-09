@@ -6,6 +6,7 @@ import {
   Activity,
   BarChart3,
   Bell,
+  BookOpenText,
   CalendarDays,
   ChevronDown,
   Crown,
@@ -48,6 +49,7 @@ const NAV = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/statistiken", label: "Statistiken", icon: BarChart3 },
   { href: "/hall-of-fame", label: "Hall of Fame", icon: Crown },
+  { href: "/regeln", label: "Regeln", icon: BookOpenText },
 ];
 
 function isActive(pathname: string, href: string) {
