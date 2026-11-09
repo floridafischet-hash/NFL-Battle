@@ -325,6 +325,42 @@ export interface LiveTeam {
   standing?: string | null;
 }
 
+export interface LiveDivisionStandingTeam {
+  rank: number;
+  slug: string;
+  name: string;
+  short_name: string;
+  abbreviation: string;
+  logo: string | null;
+  wins: string | null;
+  losses: string | null;
+  ties: string | null;
+  win_percent: string | null;
+  home: string | null;
+  road: string | null;
+  division: string | null;
+  conference: string | null;
+  points_for: string | null;
+  points_against: string | null;
+  differential: string | null;
+  streak: string | null;
+}
+
+export interface LiveDivisionStanding {
+  name: string;
+  abbreviation: string;
+  conference: "AFC" | "NFC";
+  teams: LiveDivisionStandingTeam[];
+}
+
+export interface LiveTeamsData {
+  updated_at: string | null;
+  source: string;
+  teams: LiveTeam[];
+  favorites: string[];
+  divisions: LiveDivisionStanding[];
+}
+
 export interface LiveGame {
   id: string;
   date: string;

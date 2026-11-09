@@ -15,7 +15,7 @@ import type {
   Season,
   SeasonMatch,
   Team,
-  LiveTeam,
+  LiveTeamsData,
   LiveTeamDetail,
   LivePlayerDetail,
   LiveScoreboard,
@@ -111,7 +111,7 @@ export function useTeams() {
 export function useLiveTeams() {
   return useQuery({
     queryKey: ["live-nfl", "teams"],
-    queryFn: () => get<{ updated_at: string | null; source: string; teams: LiveTeam[]; favorites: string[] }>("/api/live/teams"),
+    queryFn: () => get<LiveTeamsData>("/api/live/teams"),
     staleTime: 300_000,
   });
 }

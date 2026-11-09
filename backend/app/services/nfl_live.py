@@ -103,10 +103,67 @@ def _team(item: dict[str, Any]) -> dict[str, Any]:
 
 
 async def teams() -> dict[str, Any]:
-    data = await _json("/teams")
+    data, divisions = await asyncio.gather(_json("/teams"), division_standings())
     rows = data.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", [])
     items = sorted((_team(row.get("team", {})) for row in rows), key=lambda x: x["name"] or "")
-    return {"updated_at": data.get("timestamp"), "source": "ESPN", "teams": items}
+    return {"updated_at": data.get("timestamp"), "source": "ESPN", "teams": items, "divisions": divisions}
+
+
+def _standing_value(stats: dict[str, dict[str, Any]], *names: str) -> str | None:
+    for name in names:
+        value = stats.get(name, {}).get("displayValue")
+        if value is not None:
+            return str(value)
+    return None
+
+
+async def division_standings() -> list[dict[str, Any]]:
+    """Return all eight divisions and the current team records/statistics."""
+    data = await _fetch_json(
+        "https://site.api.espn.com/apis/v2/sports/football/nfl/standings"
+        "?region=us&lang=en&contentorigin=espn&type=0&level=3&sort=playoffseed%3Aasc"
+    )
+    divisions: list[dict[str, Any]] = []
+    for conference in data.get("children", []):
+        conference_name = conference.get("abbreviation")
+        if conference_name not in {"AFC", "NFC"}:
+            continue
+        for division in conference.get("children", []):
+            entries = []
+            for rank, entry in enumerate(division.get("standings", {}).get("entries", []), start=1):
+                team = entry.get("team", {})
+                stats = {stat.get("name"): stat for stat in entry.get("stats", [])}
+                entries.append(
+                    {
+                        "rank": rank,
+                        "slug": team.get("abbreviation", "").lower(),
+                        "name": team.get("displayName"),
+                        "short_name": team.get("shortDisplayName"),
+                        "abbreviation": team.get("abbreviation"),
+                        "logo": _logo(team),
+                        "wins": _standing_value(stats, "wins"),
+                        "losses": _standing_value(stats, "losses"),
+                        "ties": _standing_value(stats, "ties"),
+                        "win_percent": _standing_value(stats, "winPercent"),
+                        "home": _standing_value(stats, "Home"),
+                        "road": _standing_value(stats, "Road"),
+                        "division": _standing_value(stats, "divisionRecord", "vs. Div."),
+                        "conference": _standing_value(stats, "vs. Conf."),
+                        "points_for": _standing_value(stats, "pointsFor"),
+                        "points_against": _standing_value(stats, "pointsAgainst"),
+                        "differential": _standing_value(stats, "pointDifferential", "differential"),
+                        "streak": _standing_value(stats, "streak"),
+                    }
+                )
+            divisions.append(
+                {
+                    "name": division.get("name"),
+                    "abbreviation": division.get("abbreviation"),
+                    "conference": conference_name,
+                    "teams": entries,
+                }
+            )
+    return divisions
 
 
 def _scoreboard_team(competitor: dict[str, Any]) -> dict[str, Any]:

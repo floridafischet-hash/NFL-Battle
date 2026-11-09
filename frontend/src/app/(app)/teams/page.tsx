@@ -10,7 +10,7 @@ import { put } from "@/lib/api";
 import { dateTime, kickoffShort } from "@/lib/format";
 import { useLivePlayer, useLiveTeam, useLiveTeams } from "@/lib/queries";
 import { useToast } from "@/lib/toast";
-import type { LiveGame, LivePlayer, LiveTeam } from "@/lib/types";
+import type { LiveDivisionStanding, LiveGame, LivePlayer, LiveTeam, LiveTeamsData } from "@/lib/types";
 
 type Tab = "overview" | "injuries" | "roster" | "odds";
 
@@ -59,6 +59,58 @@ function GameRow({ game }: { game: LiveGame }) {
       </div>
     </div>
   );
+}
+
+const STANDING_COLUMNS = [
+  ["S", "wins", "Siege"], ["N", "losses", "Niederlagen"], ["U", "ties", "Unentschieden"],
+  ["PCT", "win_percent", "Siegquote"], ["DIV", "division", "Bilanz in der Division"],
+  ["CONF", "conference", "Bilanz in der Conference"], ["HEIM", "home", "Heimbilanz"],
+  ["AUSW", "road", "Auswärtsbilanz"], ["PF", "points_for", "Erzielte Punkte"],
+  ["PA", "points_against", "Zugelassene Punkte"], ["DIFF", "differential", "Punktedifferenz"],
+  ["SERIE", "streak", "Aktuelle Serie"],
+] as const;
+
+function DivisionStandings({ divisions, favorites, onTeam }: { divisions: LiveDivisionStanding[]; favorites: Set<string>; onTeam: (slug: string) => void }) {
+  return <section className="mb-8" aria-labelledby="division-standings-title">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <h2 id="division-standings-title" className="display text-2xl font-bold text-white">NFL Division Standings</h2>
+        <p className="text-xs text-slate-400">Aktuelle Tabellen und Saisonstatistiken aller acht Divisions</p>
+      </div>
+      <div className="flex gap-2"><Badge tone="afc">AFC</Badge><Badge tone="nfc">NFC</Badge></div>
+    </div>
+    <div className="grid gap-4 2xl:grid-cols-2">
+      {divisions.map((division) => <Card key={division.abbreviation} className={division.conference === "AFC" ? "border-afc/20" : "border-nfc/20"} bodyClassName="p-0">
+        <div className="flex items-center justify-between border-b border-white/7 px-4 py-3">
+          <h3 className="display text-lg font-bold text-white">{division.name}</h3>
+          <Badge tone={division.conference === "AFC" ? "afc" : "nfc"}>{division.conference}</Badge>
+        </div>
+        <div className="scrollbar-thin overflow-x-auto">
+          <table className="w-full min-w-[980px] text-xs">
+            <thead><tr className="bg-black/20 text-[10px] tracking-wider text-slate-500 uppercase">
+              <th className="sticky left-0 z-10 min-w-48 bg-ink-900 px-3 py-2 text-left font-semibold">Team</th>
+              {STANDING_COLUMNS.map(([label,,title]) => <th key={label} title={title} className="px-2 py-2 text-center font-semibold">{label}</th>)}
+            </tr></thead>
+            <tbody className="divide-y divide-white/5">{division.teams.map((team) => {
+              const favorite = favorites.has(team.slug);
+              return <tr key={team.slug} className={clsx("transition hover:bg-white/[0.04]", favorite && "bg-gold/[0.06]")}>
+                <td className={clsx("sticky left-0 z-10 px-3 py-2", favorite ? "bg-[#171811]" : "bg-ink-900")}>
+                  <button type="button" onClick={() => onTeam(team.slug)} className="focus-ring flex w-full items-center gap-2 rounded text-left">
+                    <span className="w-4 text-right text-[10px] text-slate-500 tabular-nums">{team.rank}</span>
+                    {team.logo ? <img src={team.logo} alt="" className="size-7 object-contain" /> : <span className="size-7" />}
+                    <span className="font-semibold text-white">{team.abbreviation}</span>
+                    <span className="truncate text-slate-400">{team.short_name}</span>
+                    {favorite && <Star className="ml-auto size-3 fill-gold text-gold" aria-label="Favoritenteam" />}
+                  </button>
+                </td>
+                {STANDING_COLUMNS.map(([,key]) => <td key={key} className={clsx("px-2 py-2 text-center tabular-nums", key === "differential" && team[key]?.startsWith("+") ? "font-semibold text-emerald-300" : "text-slate-300")}>{team[key] ?? "–"}</td>)}
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      </Card>)}
+    </div>
+  </section>;
 }
 
 function PlayerDetail({ athleteId, onClose }: { athleteId: string | null; onClose: () => void }) {
@@ -164,7 +216,7 @@ export default function TeamsPage() {
   const saveFavorites = useMutation({
     mutationFn: (next: string[]) => put<{ favorites: string[] }>("/api/live/teams/favorites", { favorites: next }),
     onSuccess: ({ favorites: saved }) => {
-      queryClient.setQueryData<{ updated_at: string | null; source: string; teams: LiveTeam[]; favorites: string[] }>(
+      queryClient.setQueryData<LiveTeamsData>(
         ["live-nfl", "teams"],
         (current) => current ? { ...current, favorites: saved } : current,
       );
@@ -182,6 +234,7 @@ export default function TeamsPage() {
     <div className="relative mb-5"><Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Team suchen …" className="focus-ring h-11 w-full rounded-xl border border-white/10 bg-white/5 pr-4 pl-10 text-sm text-white placeholder:text-slate-500 sm:max-w-md" /></div>
     {teams.isLoading && <Loading label="Aktuelle NFL-Teams werden geladen …" />}
     {teams.error && <ErrorBox error={teams.error} />}
+    {!!teams.data?.divisions.length && <DivisionStandings divisions={teams.data.divisions} favorites={favoriteSet} onTeam={setSelected} />}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{filtered.map((team) => {
       const favorite = favoriteSet.has(team.slug);
       return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/25 bg-gold/[0.04]")} bodyClassName="flex items-center gap-4">

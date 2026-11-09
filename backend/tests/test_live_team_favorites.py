@@ -51,3 +51,74 @@ async def test_games_include_personal_favorites_and_conference_rank(players, mon
         {"slug": "kc", "conference": "AFC", "rank": 4},
         {"slug": "buf", "conference": "AFC", "rank": 1},
     ]
+
+
+async def test_division_standings_include_records_and_statistics(monkeypatch):
+    async def fake_fetch_json(url, cache_seconds=nfl_live.CACHE_SECONDS):
+        return {
+            "children": [
+                {
+                    "abbreviation": "AFC",
+                    "children": [
+                        {
+                            "name": "AFC North",
+                            "abbreviation": "NORTH",
+                            "standings": {
+                                "entries": [
+                                    {
+                                        "team": {
+                                            "abbreviation": "BAL",
+                                            "displayName": "Baltimore Ravens",
+                                            "shortDisplayName": "Ravens",
+                                            "logos": [{"href": "logo.svg"}],
+                                        },
+                                        "stats": [
+                                            {"name": "wins", "displayValue": "7"},
+                                            {"name": "losses", "displayValue": "2"},
+                                            {"name": "divisionRecord", "displayValue": "3-0"},
+                                            {"name": "vs. Conf.", "displayValue": "5-1"},
+                                            {"name": "pointDifferential", "displayValue": "+42"},
+                                            {"name": "streak", "displayValue": "W4"},
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(nfl_live, "_fetch_json", fake_fetch_json)
+
+    divisions = await nfl_live.division_standings()
+
+    assert divisions == [
+        {
+            "name": "AFC North",
+            "abbreviation": "NORTH",
+            "conference": "AFC",
+            "teams": [
+                {
+                    "rank": 1,
+                    "slug": "bal",
+                    "name": "Baltimore Ravens",
+                    "short_name": "Ravens",
+                    "abbreviation": "BAL",
+                    "logo": "logo.svg",
+                    "wins": "7",
+                    "losses": "2",
+                    "ties": None,
+                    "win_percent": None,
+                    "home": None,
+                    "road": None,
+                    "division": "3-0",
+                    "conference": "5-1",
+                    "points_for": None,
+                    "points_against": None,
+                    "differential": "+42",
+                    "streak": "W4",
+                }
+            ],
+        }
+    ]
