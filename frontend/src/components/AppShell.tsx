@@ -18,6 +18,7 @@ import {
   Network,
   Shield,
   ShieldCheck,
+  TableProperties,
   UserRound,
   X,
 } from "lucide-react";
@@ -41,6 +42,7 @@ const NAV = [
   { href: "/spiele", label: "Spiele", icon: CalendarDays },
   { href: "/aktuelle-spiele", label: "Aktuelle Spiele", icon: Activity },
   { href: "/teams", label: "NFL Teams", icon: Shield },
+  { href: "/standings", label: "NFL Standings", icon: TableProperties },
   { href: "/rangliste", label: "Rangliste", icon: ListOrdered },
   { href: "/brackets", label: "Alle Brackets", icon: GitCompareArrows },
   { href: "/chat", label: "Chat", icon: MessageSquare },
