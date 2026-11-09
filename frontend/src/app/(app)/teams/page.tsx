@@ -183,12 +183,12 @@ export default function TeamsPage() {
     {teams.error && <ErrorBox error={teams.error} />}
     <main className="min-w-0" aria-label="NFL Teams">
       <div className="relative mb-5"><Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Team suchen …" className="focus-ring h-11 w-full rounded-xl border border-white/10 bg-white/5 pr-4 pl-10 text-sm text-white placeholder:text-slate-500 sm:max-w-xl" /></div>
-      <div className="grid gap-3">{filtered.map((team) => {
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{filtered.map((team) => {
       const favorite = favoriteSet.has(team.slug);
-      return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/60 bg-gold/[0.12] shadow-[0_0_24px_rgba(214,179,90,0.08)]")} bodyClassName="flex items-center gap-4">
-        <button onClick={() => setSelected(team.slug)} className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left" aria-label={`${team.name} Details öffnen`}>
-          <TeamLogo team={team} />
-          <div className="min-w-0"><p className="display truncate text-lg font-bold text-white">{team.name}</p><p className="text-xs font-semibold text-slate-500">{team.abbreviation} · Details öffnen</p></div>
+      return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/60 bg-gold/[0.12] shadow-[0_0_24px_rgba(214,179,90,0.08)]")} bodyClassName="flex items-center gap-3 p-3.5">
+        <button onClick={() => setSelected(team.slug)} className="focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left" aria-label={`${team.name} Details öffnen`}>
+          <TeamLogo team={team} size={44} />
+          <div className="min-w-0"><p className="display truncate text-base font-bold text-white">{team.name}</p><p className="truncate text-[11px] font-semibold text-slate-500">{team.abbreviation} · Details öffnen</p></div>
         </button>
         <button
           type="button"
@@ -197,7 +197,7 @@ export default function TeamsPage() {
           aria-label={favorite ? `${team.name} aus Favoriten entfernen` : `${team.name} zu Favoriten hinzufügen`}
           title={favorite ? "Favorit entfernen" : "Als Favorit markieren"}
           className={clsx("focus-ring rounded-lg p-2 transition hover:bg-white/10", favorite ? "text-gold" : "text-slate-500")}
-        ><Star className={clsx("size-5", favorite && "fill-current")} /></button>
+        ><Star className={clsx("size-4", favorite && "fill-current")} /></button>
       </Card>;
       })}</div>
       {!teams.isLoading && !filtered.length && <EmptyState title="Kein Team gefunden" />}
