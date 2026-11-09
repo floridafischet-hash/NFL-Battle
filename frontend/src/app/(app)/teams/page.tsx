@@ -221,10 +221,10 @@ export default function TeamsPage() {
     <p className="mb-4 text-xs text-slate-400">Mit dem Stern legst du deine persönlichen Favoriten fest. Sie werden nur in deinem Konto gespeichert und immer zuerst angezeigt.</p>
     {teams.isLoading && <Loading label="Aktuelle NFL-Teams werden geladen …" />}
     {teams.error && <ErrorBox error={teams.error} />}
-    <div className="grid items-start gap-5 2xl:grid-cols-[minmax(600px,0.95fr)_minmax(520px,1.05fr)]">
-      <main className="order-1 min-w-0 2xl:order-2">
+    <div className="grid items-start gap-6 2xl:grid-cols-[minmax(600px,1.15fr)_minmax(420px,0.85fr)]">
+      <main className="order-1 min-w-0 2xl:order-2" aria-label="NFL Teams">
         <div className="relative mb-5"><Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Team suchen …" className="focus-ring h-11 w-full rounded-xl border border-white/10 bg-white/5 pr-4 pl-10 text-sm text-white placeholder:text-slate-500" /></div>
-        <div className="grid gap-3 sm:grid-cols-2">{filtered.map((team) => {
+        <div className="grid gap-3">{filtered.map((team) => {
       const favorite = favoriteSet.has(team.slug);
       return <Card key={team.id} className={clsx("group relative h-full transition hover:-translate-y-0.5 hover:border-white/15", favorite && "border-gold/60 bg-gold/[0.12] shadow-[0_0_24px_rgba(214,179,90,0.08)]")} bodyClassName="flex items-center gap-4">
         <button onClick={() => setSelected(team.slug)} className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left" aria-label={`${team.name} Details öffnen`}>
@@ -243,7 +243,7 @@ export default function TeamsPage() {
         })}</div>
         {!teams.isLoading && !filtered.length && <EmptyState title="Kein Team gefunden" />}
       </main>
-      {!!teams.data?.divisions.length && <aside className="order-2 min-w-0 2xl:order-1"><DivisionStandings divisions={teams.data.divisions} favorites={favoriteSet} onTeam={setSelected} /></aside>}
+      {!!teams.data?.divisions.length && <aside className="order-2 min-w-0 2xl:order-1" aria-label="NFL Division Standings"><DivisionStandings divisions={teams.data.divisions} favorites={favoriteSet} onTeam={setSelected} /></aside>}
     </div>
     <TeamDetail slug={selectedPlayer ? null : selected} onClose={() => setSelected(null)} onPlayer={setSelectedPlayer} />
     <PlayerDetail athleteId={selectedPlayer?.id ?? null} onClose={() => setSelectedPlayer(null)} />
