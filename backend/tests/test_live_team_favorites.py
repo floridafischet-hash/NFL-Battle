@@ -122,3 +122,61 @@ async def test_division_standings_include_records_and_statistics(monkeypatch):
             ],
         }
     ]
+
+
+async def test_game_stats_include_team_comparison_and_key_players(monkeypatch):
+    async def fake_fetch_json(url, cache_seconds=nfl_live.CACHE_SECONDS):
+        assert url.endswith("/summary?event=401234567")
+        return {
+            "boxscore": {
+                "teams": [
+                    {
+                        "team": {"id": "1", "displayName": "Away Team", "abbreviation": "AWY", "logo": "away.svg"},
+                        "statistics": [
+                            {"name": "totalYards", "displayValue": "321"},
+                            {"name": "turnovers", "displayValue": "2"},
+                        ],
+                    }
+                ],
+                "players": [
+                    {
+                        "team": {"id": "1", "displayName": "Away Team", "abbreviation": "AWY", "logo": "away.svg"},
+                        "statistics": [
+                            {
+                                "name": "passing",
+                                "labels": ["C/ATT", "YDS", "TD", "INT"],
+                                "athletes": [
+                                    {
+                                        "athlete": {
+                                            "id": "9",
+                                            "displayName": "Test Quarterback",
+                                            "position": {"abbreviation": "QB"},
+                                        },
+                                        "stats": ["20/30", "250", "2", "1"],
+                                    }
+                                ],
+                            },
+                            {
+                                "name": "interceptions",
+                                "labels": ["INT", "YDS", "TD"],
+                                "athletes": [
+                                    {"athlete": {"id": "24", "displayName": "Test Corner"}, "stats": ["1", "12", "0"]}
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            }
+        }
+
+    monkeypatch.setattr(nfl_live, "_fetch_json", fake_fetch_json)
+
+    result = await nfl_live.game_stats("401234567")
+
+    assert result["source"] == "ESPN"
+    assert result["teams"][0]["statistics"] == [
+        {"key": "totalYards", "label": "Yards gesamt", "value": "321"},
+        {"key": "turnovers", "label": "Turnovers", "value": "2"},
+    ]
+    assert result["players"][0]["categories"][0]["athletes"][0]["name"] == "Test Quarterback"
+    assert result["players"][0]["categories"][1]["athletes"][0]["stats"] == ["1", "12", "0"]

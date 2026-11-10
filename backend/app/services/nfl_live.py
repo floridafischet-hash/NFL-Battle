@@ -14,6 +14,7 @@ BASE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 WEB_BASE = "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl"
 TEAM_RE = re.compile(r"^[a-z]{2,3}$")
 ATHLETE_RE = re.compile(r"^[0-9]{1,12}$")
+EVENT_RE = re.compile(r"^[0-9]{1,12}$")
 NFL_TEAM_SLUGS = frozenset(
     {
         "ari",
@@ -256,6 +257,108 @@ async def regular_season_games() -> dict[str, Any]:
         "season": season_year,
         "week": next_week or data.get("week", {}).get("number"),
         "games": visible_games,
+    }
+
+
+TEAM_STAT_KEYS = {
+    "firstDowns": "First Downs",
+    "totalYards": "Yards gesamt",
+    "netPassingYards": "Passing Yards",
+    "rushingYards": "Rushing Yards",
+    "turnovers": "Turnovers",
+    "thirdDownEff": "3rd-Down-Effizienz",
+    "fourthDownEff": "4th-Down-Effizienz",
+    "possessionTime": "Ballbesitz",
+    "totalPenaltiesYards": "Strafen",
+    "sacksYardsLost": "Sacks–Yards",
+}
+
+PLAYER_CATEGORY_LIMITS = {
+    "passing": ("Passing", 3),
+    "rushing": ("Rushing", 5),
+    "receiving": ("Receiving", 6),
+    "fumbles": ("Fumbles", 5),
+    "defensive": ("Defense", 6),
+    "interceptions": ("Interceptions", 5),
+    "kicking": ("Kicking", 3),
+}
+
+
+def _game_team_stats(item: dict[str, Any]) -> dict[str, Any]:
+    team = item.get("team", {})
+    by_name = {stat.get("name"): stat for stat in item.get("statistics", [])}
+    return {
+        "team": {
+            "id": team.get("id"),
+            "name": team.get("displayName"),
+            "abbreviation": team.get("abbreviation"),
+            "logo": team.get("logo"),
+        },
+        "statistics": [
+            {"key": key, "label": label, "value": _display(by_name.get(key, {}).get("displayValue"))}
+            for key, label in TEAM_STAT_KEYS.items()
+            if by_name.get(key, {}).get("displayValue") is not None
+        ],
+    }
+
+
+def _game_player_stats(item: dict[str, Any]) -> dict[str, Any]:
+    team = item.get("team", {})
+    categories = []
+    for category in item.get("statistics", []):
+        key = category.get("name")
+        if key not in PLAYER_CATEGORY_LIMITS:
+            continue
+        label, limit = PLAYER_CATEGORY_LIMITS[key]
+        athletes = []
+        for row in category.get("athletes", [])[:limit]:
+            athlete = row.get("athlete", {})
+            athletes.append(
+                {
+                    "id": athlete.get("id"),
+                    "name": athlete.get("displayName"),
+                    "short_name": athlete.get("shortName"),
+                    "headshot": athlete.get("headshot", {}).get("href"),
+                    "position": athlete.get("position", {}).get("abbreviation"),
+                    "stats": [_display(value) for value in row.get("stats", [])],
+                }
+            )
+        if athletes:
+            categories.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "labels": [str(value) for value in category.get("labels", [])],
+                    "athletes": athletes,
+                }
+            )
+    return {
+        "team": {
+            "id": team.get("id"),
+            "name": team.get("displayName"),
+            "abbreviation": team.get("abbreviation"),
+            "logo": team.get("logo"),
+        },
+        "categories": categories,
+    }
+
+
+async def game_stats(event_id: str) -> dict[str, Any]:
+    """Return the ESPN box score for one completed or live NFL event."""
+    if not EVENT_RE.fullmatch(event_id):
+        raise LiveDataError("Ungültige Spiel-ID.")
+    data = await _fetch_json(f"{BASE}/summary?event={event_id}", cache_seconds=300)
+    boxscore = data.get("boxscore", {})
+    teams = [_game_team_stats(item) for item in boxscore.get("teams", [])]
+    players = [_game_player_stats(item) for item in boxscore.get("players", [])]
+    if not teams:
+        raise LiveDataError("Für dieses Spiel sind noch keine Statistiken verfügbar.")
+    return {
+        "updated_at": datetime.now(UTC).isoformat(),
+        "source": "ESPN",
+        "event_id": event_id,
+        "teams": teams,
+        "players": players,
     }
 
 

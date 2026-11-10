@@ -398,6 +398,25 @@ export interface LiveScoreboardGame {
   away: LiveScoreboardTeam;
 }
 
+export interface LiveGameStats {
+  updated_at: string;
+  source: string;
+  event_id: string;
+  teams: {
+    team: { id: string; name: string; abbreviation: string; logo: string | null };
+    statistics: { key: string; label: string; value: string | null }[];
+  }[];
+  players: {
+    team: { id: string; name: string; abbreviation: string; logo: string | null };
+    categories: {
+      key: string;
+      label: string;
+      labels: string[];
+      athletes: { id: string; name: string; short_name: string | null; headshot: string | null; position: string | null; stats: (string | null)[] }[];
+    }[];
+  }[];
+}
+
 export interface LiveScoreboard {
   updated_at: string;
   source: string;

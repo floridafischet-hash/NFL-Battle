@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Activity, ArrowDown, ArrowRight, ArrowUp, CalendarDays, ChevronDown, Maximize2, Minus, Star, Trophy } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { TeamLogo } from "@/components/TeamLogo";
@@ -129,7 +129,7 @@ function ScoreboardTeam({ team, gameState }: { team: LiveScoreboardTeam; gameSta
   </div>;
 }
 
-export function ScoreboardGame({ game, favorite = false }: { game: LiveScoreboardGame; favorite?: boolean }) {
+export function ScoreboardGame({ game, favorite = false, children }: { game: LiveScoreboardGame; favorite?: boolean; children?: ReactNode }) {
   const live = game.state === "in";
   return <div className={clsx("relative rounded-xl border p-3 transition-colors", favorite ? "border-gold/45 bg-gold/[0.09] shadow-[inset_3px_0_0_#d6b35a]" : live ? "border-red-500/25 bg-red-500/[0.06]" : "border-white/7 bg-white/[0.025]")}>
     <div className="mb-2 flex items-center justify-between gap-2">
@@ -140,6 +140,7 @@ export function ScoreboardGame({ game, favorite = false }: { game: LiveScoreboar
       <ScoreboardTeam team={game.away} gameState={game.state} />
       <ScoreboardTeam team={game.home} gameState={game.state} />
     </div>
+    {children}
   </div>;
 }
 

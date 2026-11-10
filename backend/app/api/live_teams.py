@@ -84,6 +84,14 @@ async def live_regular_season_games(principal: CurrentUser, session: DBSession) 
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/games/{event_id}/stats")
+async def live_game_stats(event_id: str, principal: CurrentUser) -> dict[str, Any]:
+    try:
+        return await nfl_live.game_stats(event_id)
+    except nfl_live.LiveDataError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.get("/teams/{slug}")
 async def live_team(slug: str, principal: CurrentUser) -> dict[str, Any]:
     try:

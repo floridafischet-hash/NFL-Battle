@@ -19,6 +19,7 @@ import type {
   LiveTeamDetail,
   LivePlayerDetail,
   LiveScoreboard,
+  LiveGameStats,
   UserRef,
   UserStats,
 } from "./types";
@@ -140,6 +141,15 @@ export function useLiveGames() {
     queryFn: () => get<LiveScoreboard>("/api/live/games"),
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+export function useLiveGameStats(eventId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["live-nfl", "game-stats", eventId],
+    queryFn: () => get<LiveGameStats>(`/api/live/games/${eventId}/stats`),
+    enabled,
+    staleTime: 300_000,
   });
 }
 

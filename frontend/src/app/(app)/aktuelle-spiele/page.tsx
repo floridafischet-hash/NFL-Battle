@@ -3,6 +3,7 @@
 import { Activity, CalendarDays, CheckCircle2, Clock3 } from "lucide-react";
 
 import { scoreboardGroup, ScoreboardGame } from "@/components/dashboard/Widgets";
+import { GameStatsPanel } from "@/components/live/GameStatsPanel";
 import { Card, EmptyState, ErrorBox, Loading, PageHeader, StatTile } from "@/components/ui";
 import { dateTime } from "@/lib/format";
 import { useLiveGames } from "@/lib/queries";
@@ -43,7 +44,9 @@ export default function CurrentGamesPage() {
           {groups.map((group) => <section key={group.key}>
             <h3 className={group.key === "live" ? "mb-3 text-sm font-bold text-red-400" : group.key === "upcoming" ? "mb-3 text-sm font-bold text-gold" : "mb-3 text-sm font-bold text-slate-400"}>{group.label}</h3>
             <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {group.games.map((game) => <ScoreboardGame key={game.id} game={game} favorite={data.favorites.some((slug) => [game.home.abbreviation, game.away.abbreviation].some((abbr) => abbr?.toLowerCase() === slug))} />)}
+              {group.games.map((game) => <ScoreboardGame key={game.id} game={game} favorite={data.favorites.some((slug) => [game.home.abbreviation, game.away.abbreviation].some((abbr) => abbr?.toLowerCase() === slug))}>
+                {game.completed && <GameStatsPanel game={game} />}
+              </ScoreboardGame>)}
             </div>
           </section>)}
         </div>
